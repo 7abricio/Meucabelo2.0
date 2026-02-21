@@ -117,7 +117,7 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBf1QNBMm8vtqVZoiwDxDYtLqAEDIRAudQ",
@@ -298,6 +298,8 @@
             const [authStep, setAuthStep] = useState('auth'); 
             const [isLoginFlow, setIsLoginFlow] = useState(true);
             const [userName, setUserName] = useState('');
+            const [isEditingName, setIsEditingName] = useState(false);
+            const [editNameInput, setEditNameInput] = useState('');
 
             const [usernameInput, setUsernameInput] = useState('');
             const [passwordInput, setPasswordInput] = useState('');
@@ -312,7 +314,7 @@
             const [settingsStep, setSettingsStep] = useState('menu'); 
             const [isSettingsFlipping, setIsSettingsFlipping] = useState(false);
 
-            const [editNameInput, setEditNameInput] = useState('');
+            const [editSettingsUsernameInput, setEditSettingsUsernameInput] = useState('');
             const [editPasswordInput, setEditPasswordInput] = useState('');
 
             const [pastProductPrompt, setPastProductPrompt] = useState(null);
@@ -363,7 +365,7 @@
             const [customStart, setCustomStart] = useState(addDaysStr(getTodayStr(), -7));
             const [customEnd, setCustomEnd] = useState(getTodayStr());
 
-            // Pull to refresh NO SOLTAR
+            // --- LÓGICA DO PULL TO REFRESH NO SOLTAR (CORRIGIDA) ---
             const pullStartY = useRef(null);
             const [pullDistance, setPullDistance] = useState(0);
 
@@ -379,21 +381,38 @@
             };
 
             const handlePullTouchStart = (e) => {
-                if (e.currentTarget.scrollTop <= 0) pullStartY.current = e.touches[0].clientY;
-                else pullStartY.current = null;
+                const scrollContainer = e.target.closest('.smooth-scroll');
+                // Só permite ativar se tocarmos numa área que NÃO faz scroll ou se a área de scroll já estiver no topo
+                if (scrollContainer) {
+                    if (scrollContainer.scrollTop <= 0) {
+                        pullStartY.current = e.touches[0].clientY;
+                    } else {
+                        pullStartY.current = null;
+                    }
+                } else {
+                    pullStartY.current = e.touches[0].clientY;
+                }
             };
 
             const handlePullTouchMove = (e) => {
                 if (!pullStartY.current) return;
                 const dy = e.touches[0].clientY - pullStartY.current;
-                if (dy > 0) setPullDistance(dy);
+                // Só queremos detetar o gesto de puxar PARA BAIXO
+                if (dy > 0) {
+                    setPullDistance(dy);
+                } else {
+                    setPullDistance(0);
+                }
             };
 
             const handlePullTouchEnd = () => {
-                if (pullDistance > 110) triggerRefresh();
+                if (pullDistance > 100) {
+                    triggerRefresh();
+                }
                 setPullDistance(0);
                 pullStartY.current = null;
             };
+            // --------------------------------------------------------
 
             useEffect(() => {
                 if (!user) return;
@@ -495,10 +514,26 @@
                 setIsSettingsOpen(false); setRefreshTrigger(p=>p+1);
             };
 
-            // SETTINGS FLIP LOGIC
+            // ALTERAR NOME (ALCUNHA) VIA LÁPIS NA HOME
+            const handleSaveName = async () => {
+                if(editNameInput.trim()) {
+                    const newName = editNameInput.trim();
+                    setUserName(newName);
+                    setUsersDb(prev => ({ ...prev, [currentUsername]: { ...prev[currentUsername], name: newName } }));
+                    if (user) {
+                        try {
+                            const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
+                            await setDoc(userRef, { name: newName }, { merge: true });
+                        } catch(e) { console.error(e); addNotification("Erro ao atualizar o nome no servidor.", true); }
+                    }
+                }
+                setIsEditingName(false);
+            };
+
+            // SETTINGS FLIP LOGIC (PARA MUDAR USUÁRIO OU SENHA)
             const handleOpenSettings = () => {
                 setSettingsStep('menu');
-                setEditNameInput(userName);
+                setEditSettingsUsernameInput(currentUsername);
                 setEditPasswordInput(usersDb[currentUsername]?.password || '');
                 setIsSettingsOpen(true);
             };
@@ -521,24 +556,59 @@
             };
 
             const handleSaveSetting = async (type) => {
-                let updates = {};
-                if (type === 'name' && editNameInput.trim() && editNameInput.trim() !== userName) {
-                    updates.name = editNameInput.trim();
-                    setUserName(editNameInput.trim());
-                } else if (type === 'password' && editPasswordInput.trim() && editPasswordInput.trim() !== usersDb[currentUsername].password) {
-                    updates.password = editPasswordInput.trim();
-                }
+                if (type === 'username') {
+                    const newUsername = editSettingsUsernameInput.trim().toLowerCase();
+                    if (!newUsername || newUsername === currentUsername) {
+                        handleCloseSettings();
+                        return;
+                    }
+                    // VALIDAÇÃO: Confere se já existe um registo com este ID de Login
+                    if (usersDb[newUsername]) {
+                        addNotification("Este utilizador já está a ser utilizado por outra pessoa! Escolha outro.", true);
+                        return; // Impede que o código avance e sobrescreva dados de outro utilizador
+                    }
 
-                if (Object.keys(updates).length > 0) {
-                    setUsersDb(prev => ({ ...prev, [currentUsername]: { ...prev[currentUsername], ...updates } }));
+                    // Se passou na validação: Migração de dados de utilizador
+                    const userData = usersDb[currentUsername];
+                    
+                    // Update Local
+                    setUsersDb(prev => {
+                        const newDb = { ...prev };
+                        newDb[newUsername] = userData;
+                        delete newDb[currentUsername];
+                        return newDb;
+                    });
+                    setCurrentUsername(newUsername);
+
+                    // Update Server (Cria novo e apaga velho)
+                    if (user) {
+                        try {
+                            const newRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', newUsername);
+                            await setDoc(newRef, userData);
+                            
+                            const oldRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
+                            await deleteDoc(oldRef);
+                            
+                            addNotification("Utilizador alterado com sucesso!");
+                        } catch(e) { addNotification("Erro ao atualizar utilizador na nuvem.", true); }
+                    }
+                } else if (type === 'password') {
+                    const newPassword = editPasswordInput.trim();
+                    if (!newPassword || newPassword === usersDb[currentUsername].password) {
+                        handleCloseSettings();
+                        return;
+                    }
+
+                    setUsersDb(prev => ({ ...prev, [currentUsername]: { ...prev[currentUsername], password: newPassword } }));
                     if (user) {
                         try {
                             const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
-                            await setDoc(userRef, updates, { merge: true });
-                            addNotification("Atualizado com sucesso!");
-                        } catch(e) { addNotification("Erro ao atualizar.", true); }
+                            await setDoc(userRef, { password: newPassword }, { merge: true });
+                            addNotification("Palavra-passe alterada com sucesso!");
+                        } catch(e) { addNotification("Erro ao atualizar palavra-passe.", true); }
                     }
                 }
+                
                 handleCloseSettings();
             };
 
@@ -753,8 +823,15 @@
             if (authStep === 'auth' || authStep === 'onboarding' || authStep === 'recovery') {
                 return (
                     <div className={`min-h-[100dvh] w-full ${colors.bg} flex items-center justify-center p-4 transition-colors overflow-hidden`} onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}>
-                        <div className={`absolute top-0 left-0 w-full flex justify-center items-center pointer-events-none transition-opacity duration-300 z-50 ${pullDistance > 20 ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translateY(${Math.min(pullDistance, 90)}px)` }}>
-                            <div className={`${colors.card} rounded-full p-2.5 shadow-lg border ${colors.border}`}><i className={`ph-bold ph-arrow-down ${colors.textStrong} text-xl transition-transform duration-300 ${pullDistance > 110 ? 'rotate-180 text-blue-500' : ''}`}></i></div>
+                        
+                        {/* ÍCONE PULL TO REFRESH ELEGANTE (Aparece no ecrã de Login também) */}
+                        <div className={`absolute top-0 left-0 w-full flex justify-center items-start pt-8 pointer-events-none transition-all duration-300 z-[150] ${pullDistance > 20 ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translateY(${Math.min(pullDistance - 40, 40)}px)` }}>
+                            <div className={`${colors.notification} rounded-full px-5 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)] border flex items-center gap-3 transition-all duration-300 ${pullDistance > 100 ? 'scale-105' : 'scale-100'}`}>
+                                <i className={`ph-bold ph-arrow-down transition-transform duration-300 ${pullDistance > 100 ? 'rotate-180 text-emerald-500' : colors.textStrong} text-lg`}></i>
+                                <span className={`text-xs font-bold transition-colors duration-300 ${pullDistance > 100 ? 'text-emerald-500' : colors.textStrong}`}>
+                                    {pullDistance > 100 ? 'Solte para atualizar' : 'Puxe para atualizar'}
+                                </span>
+                            </div>
                         </div>
 
                         <div key={`auth-${refreshTrigger}`} className={`max-w-md w-full relative ${colors.bg} shadow-2xl flex flex-col rounded-[2.5rem] border ${colors.border}`}>
@@ -808,9 +885,14 @@
             return (
                 <div className={`h-[100dvh] w-full ${colors.bg} transition-colors duration-500 overflow-hidden relative`} onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}>
                     
-                    {/* ÍCONE PULL TO REFRESH */}
-                    <div className={`absolute top-0 left-0 w-full flex justify-center items-center pointer-events-none transition-opacity duration-300 z-50 ${pullDistance > 20 ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translateY(${Math.min(pullDistance, 90)}px)` }}>
-                        <div className={`${colors.card} rounded-full p-2.5 shadow-lg border ${colors.border}`}><i className={`ph-bold ph-arrow-down ${colors.textStrong} text-xl transition-transform duration-300 ${pullDistance > 110 ? 'rotate-180 text-blue-500' : ''}`}></i></div>
+                    {/* ÍCONE PULL TO REFRESH ELEGANTE */}
+                    <div className={`absolute top-0 left-0 w-full flex justify-center items-start pt-8 pointer-events-none transition-all duration-300 z-[150] ${pullDistance > 20 ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translateY(${Math.min(pullDistance - 40, 40)}px)` }}>
+                        <div className={`${colors.notification} rounded-full px-5 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)] border flex items-center gap-3 transition-all duration-300 ${pullDistance > 100 ? 'scale-105' : 'scale-100'}`}>
+                            <i className={`ph-bold ph-arrow-down transition-transform duration-300 ${pullDistance > 100 ? 'rotate-180 text-emerald-500' : colors.textStrong} text-lg`}></i>
+                            <span className={`text-xs font-bold transition-colors duration-300 ${pullDistance > 100 ? 'text-emerald-500' : colors.textStrong}`}>
+                                {pullDistance > 100 ? 'Solte para atualizar' : 'Puxe para atualizar'}
+                            </span>
+                        </div>
                     </div>
 
                     {/* OVERLAY DEFINIÇÕES (ENGRENAGEM FLIP CARD) */}
@@ -825,26 +907,26 @@
                                             <button onClick={handleCloseSettings} className={`${colors.textLight} hover:${colors.textStrong}`}><i className="ph-bold ph-x text-xl"></i></button>
                                         </div>
                                         <div className="space-y-3 mb-2">
-                                            <Button onClick={() => handleSettingsNav('name')} variant="outline" colors={colors} className="w-full justify-start py-4"><i className="ph-fill ph-user text-lg mr-2"></i> Mudar o meu Usuário</Button>
+                                            <Button onClick={() => handleSettingsNav('username')} variant="outline" colors={colors} className="w-full justify-start py-4"><i className="ph-fill ph-user text-lg mr-2"></i> Alterar Utilizador</Button>
                                             <Button onClick={() => handleSettingsNav('password')} variant="outline" colors={colors} className="w-full justify-start py-4"><i className="ph-fill ph-lock-key text-lg mr-2"></i> Alterar Palavra-passe</Button>
                                         </div>
                                     </>
                                 )}
 
-                                {settingsStep === 'name' && (
+                                {settingsStep === 'username' && (
                                     <>
                                         <div className="flex items-center mb-6">
                                             <button onClick={() => handleSettingsNav('menu')} className={`${colors.textLight} hover:${colors.textStrong} mr-3`}><i className="ph-bold ph-arrow-left text-xl"></i></button>
-                                            <h2 className={`text-xl font-black ${colors.text} font-serif`}>Mudar Usuário</h2>
+                                            <h2 className={`text-xl font-black ${colors.text} font-serif`}>Mudar Utilizador</h2>
                                         </div>
                                         <div className="mb-8">
-                                            <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Novo Nome</label>
+                                            <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Novo Utilizador de Login</label>
                                             <div className={`flex items-center ${colors.surface} px-4 py-3 rounded-2xl border ${colors.border}`}>
                                                 <i className={`ph-fill ph-user ${colors.textMuted} text-lg`}></i>
-                                                <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
+                                                <input type="text" value={editSettingsUsernameInput} onChange={e => setEditSettingsUsernameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
                                             </div>
                                         </div>
-                                        <Button onClick={() => handleSaveSetting('name')} variant="primary" colors={colors} className="w-full">Guardar Alteração</Button>
+                                        <Button onClick={() => handleSaveSetting('username')} variant="primary" colors={colors} className="w-full">Guardar Utilizador</Button>
                                     </>
                                 )}
 
@@ -855,13 +937,13 @@
                                             <h2 className={`text-xl font-black ${colors.text} font-serif`}>Nova Palavra-passe</h2>
                                         </div>
                                         <div className="mb-8">
-                                            <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Palavra-passe</label>
+                                            <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Escreva a nova passe</label>
                                             <div className={`flex items-center ${colors.surface} px-4 py-3 rounded-2xl border ${colors.border}`}>
                                                 <i className={`ph-fill ph-lock-key ${colors.textMuted} text-lg`}></i>
                                                 <input type="text" value={editPasswordInput} onChange={e => setEditPasswordInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
                                             </div>
                                         </div>
-                                        <Button onClick={() => handleSaveSetting('password')} variant="primary" colors={colors} className="w-full">Guardar Alteração</Button>
+                                        <Button onClick={() => handleSaveSetting('password')} variant="primary" colors={colors} className="w-full">Guardar Passe</Button>
                                     </>
                                 )}
 
@@ -965,9 +1047,23 @@
                                                 <>
                                                     <p className={`text-xs ${colors.textLight} uppercase tracking-widest font-bold`}>{formatDateVisual(activeDateStr)}</p>
                                                     <div className="mt-1 flex items-center">
-                                                        <h1 className={`text-3xl font-bold ${colors.text} font-serif flex items-center gap-2 tracking-tight`}>
-                                                            {activeDateStr === realTodayStr ? <>Olá, {userName}!</> : 'Registo Antigo'}
-                                                        </h1>
+                                                        {isEditingName && activeDateStr === realTodayStr ? (
+                                                            <div className="flex items-center gap-2 w-full animate-in">
+                                                                <span className={`text-2xl font-bold ${colors.text} font-serif`}>Olá,</span>
+                                                                <input autoFocus value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className={`bg-transparent border-b border-dashed ${colors.border} outline-none text-2xl font-bold ${colors.textStrong} font-serif w-32`} />
+                                                                <button onClick={handleSaveName} className={`text-lg ml-1 ${colors.greenText}`}><i className="ph-bold ph-check"></i></button>
+                                                                <button onClick={() => setIsEditingName(false)} className="text-lg text-red-400"><i className="ph-bold ph-x"></i></button>
+                                                            </div>
+                                                        ) : (
+                                                            <h1 className={`text-3xl font-bold ${colors.text} font-serif flex items-center gap-2 tracking-tight`}>
+                                                                {activeDateStr === realTodayStr ? (
+                                                                    <>
+                                                                        Olá, {userName}!
+                                                                        <button onClick={() => { setEditNameInput(userName); setIsEditingName(true); }} className={`p-1.5 rounded-full ${colors.surface} text-sm ${colors.textLight} hover:${colors.primaryText} transition-colors ml-1`}><i className="ph-bold ph-pencil-simple"></i></button>
+                                                                    </>
+                                                                ) : 'Registo Antigo'}
+                                                            </h1>
+                                                        )}
                                                     </div>
                                                     {activeDateStr !== realTodayStr && (<button onClick={() => setActiveDateStr(realTodayStr)} className={`text-xs ${colors.primaryText} font-bold mt-2 flex items-center gap-1 bg-[#D2E0D9] bg-opacity-30 px-3 py-1.5 rounded-full inline-flex`}><i className="ph-bold ph-arrow-left"></i> Voltar para Hoje</button>)}
                                                 </>
