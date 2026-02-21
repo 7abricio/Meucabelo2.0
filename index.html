@@ -27,7 +27,7 @@
             overflow: hidden; 
             font-family: 'Plus Jakarta Sans', sans-serif; 
             -webkit-tap-highlight-color: transparent;
-            overscroll-behavior: none; /* Previne o refresh nativo do browser */
+            overscroll-behavior: none; 
             user-select: none;
         }
         
@@ -48,7 +48,6 @@
             to { opacity: 1; transform: translateY(0); } 
         }
 
-        /* ANIMAÇÃO DE CASCATA FLUIDA */
         .cascade-item {
             opacity: 0;
             animation: cascadeDownFluid 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -69,13 +68,13 @@
         .perspective-container { perspective: 1200px; }
         
         .flip-card-enter {
-            animation: flipCardIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            animation: flipCardIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
             transform-style: preserve-3d;
             backface-visibility: hidden;
         }
         
         .flip-card-exit {
-            animation: flipCardOut 0.4s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;
+            animation: flipCardOut 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;
             transform-style: preserve-3d;
             backface-visibility: hidden;
         }
@@ -218,18 +217,14 @@
         const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
         const dateObjToStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        
         const getTodayStr = () => dateObjToStr(new Date());
-
         const addDaysStr = (dateStr, days) => {
             const [y, m, d] = dateStr.split('-');
             const date = new Date(y, m - 1, d);
             date.setDate(date.getDate() + days);
             return dateObjToStr(date);
         };
-
         const formatTime = (date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-        
         const formatDateVisual = (dateStr) => {
             if(!dateStr) return '';
             const [y, m, d] = dateStr.split('-');
@@ -278,7 +273,7 @@
                         }
                     } catch (error) {
                         console.error("Erro na Autenticação Firebase:", error);
-                        addNotification("🚨 Erro de Ligação: Vá à consola Firebase > Authentication > ative 'Anonymous'.", true);
+                        addNotification("🚨 Erro de Ligação.", true);
                     }
                 };
                 initAuth();
@@ -309,10 +304,14 @@
             const [securityAnswerInput, setSecurityAnswerInput] = useState('');
 
             const [showTutorial, setShowTutorial] = useState(false);
+            const [tutorialMode, setTutorialMode] = useState('login'); 
             const [dontShowTutorialAgain, setDontShowTutorialAgain] = useState(false);
             
             const [isSettingsOpen, setIsSettingsOpen] = useState(false);
             const [isClosingSettings, setIsClosingSettings] = useState(false);
+            const [settingsStep, setSettingsStep] = useState('menu'); 
+            const [isSettingsFlipping, setIsSettingsFlipping] = useState(false);
+
             const [editNameInput, setEditNameInput] = useState('');
             const [editPasswordInput, setEditPasswordInput] = useState('');
 
@@ -330,9 +329,7 @@
                     const nowStr = getTodayStr();
                     if (nowStr !== realTodayStr) {
                         setRealTodayStr(nowStr);
-                        if (activeDateStr === realTodayStr || activeDateStr === '') {
-                            setActiveDateStr(nowStr);
-                        }
+                        if (activeDateStr === realTodayStr || activeDateStr === '') setActiveDateStr(nowStr);
                     }
                 }, 60000);
                 return () => clearInterval(interval);
@@ -366,7 +363,7 @@
             const [customStart, setCustomStart] = useState(addDaysStr(getTodayStr(), -7));
             const [customEnd, setCustomEnd] = useState(getTodayStr());
 
-            // --- LÓGICA DO PULL TO REFRESH NO SOLTAR ---
+            // Pull to refresh NO SOLTAR
             const pullStartY = useRef(null);
             const [pullDistance, setPullDistance] = useState(0);
 
@@ -376,37 +373,27 @@
 
             const triggerRefresh = () => {
                 scrollToTop();
-                if (authStep === 'app') {
-                    handleNavMenuClick('home'); 
-                }
+                if (authStep === 'app') handleNavMenuClick('home'); 
                 setRefreshTrigger(p => p + 1); 
                 if(navigator.vibrate) navigator.vibrate(50);
             };
 
             const handlePullTouchStart = (e) => {
-                if (e.currentTarget.scrollTop <= 0) {
-                    pullStartY.current = e.touches[0].clientY;
-                } else {
-                    pullStartY.current = null;
-                }
+                if (e.currentTarget.scrollTop <= 0) pullStartY.current = e.touches[0].clientY;
+                else pullStartY.current = null;
             };
 
             const handlePullTouchMove = (e) => {
                 if (!pullStartY.current) return;
                 const dy = e.touches[0].clientY - pullStartY.current;
-                if (dy > 0) {
-                    setPullDistance(dy);
-                }
+                if (dy > 0) setPullDistance(dy);
             };
 
             const handlePullTouchEnd = () => {
-                if (pullDistance > 110) {
-                    triggerRefresh();
-                }
+                if (pullDistance > 110) triggerRefresh();
                 setPullDistance(0);
                 pullStartY.current = null;
             };
-            // ------------------------------------------
 
             useEffect(() => {
                 if (!user) return;
@@ -416,34 +403,26 @@
                         const dbUsers = {};
                         snapshot.forEach(doc => { dbUsers[doc.id] = doc.data(); });
                         setUsersDb(prev => ({ ...INITIAL_USERS_DB, ...dbUsers }));
-                    }, (error) => {
-                        console.error("Firestore read error:", error);
-                        addNotification("🚨 Erro Base de Dados: Verifique as regras de segurança no Firestore.", true);
-                    });
+                    }, (error) => { console.error("Firestore error:", error); });
                     return () => unsubscribe();
-                } catch (e) { console.error("Setup Firestore error:", e); }
+                } catch (e) {}
             }, [user]);
 
             useEffect(() => {
                 if (currentUsername && authStep === 'app' && user) {
                     setUsersDb(prev => ({ ...prev, [currentUsername]: { ...prev[currentUsername], logs, products } }));
                     const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
-                    setDoc(userRef, { logs, products }, { merge: true }).catch(err => {
-                        console.error(err); addNotification("🚨 Erro ao guardar registo no Firestore.", true);
-                    });
+                    setDoc(userRef, { logs, products }, { merge: true }).catch(err => { console.error(err); });
                 }
             }, [logs, products, currentUsername, authStep, user]);
 
             const getSafeDayLog = (dateStr) => {
                 const log = logs[dateStr] || {};
                 return {
-                    status: log.status || [],
-                    washed: log.washed || false,
+                    status: log.status || [], washed: log.washed || false,
                     treatment: log.treatment || { minutes: 0, type: '' },
-                    routine: log.routine || {},
-                    heat: log.heat || { active: false, protectant: false },
-                    salon: log.salon || null,
-                    extras: log.extras || []
+                    routine: log.routine || {}, heat: log.heat || { active: false, protectant: false },
+                    salon: log.salon || null, extras: log.extras || []
                 };
             };
 
@@ -472,7 +451,7 @@
                         setCurrentUsername(userKey); setUserName(userAccount.name); setLogs(userAccount.logs || {}); 
                         setProducts(userAccount.products || []); setActiveDateStr(getTodayStr()); setSelectedHistoryDate(getTodayStr()); setIsNavOpen(false); 
                         setAuthStep('app'); setActiveTab('home'); setStatsPeriod('ontem'); setRefreshTrigger(p=>p+1);
-                        if (!userAccount.hideTutorial) setShowTutorial(true); 
+                        if (!userAccount.hideTutorial) { setTutorialMode('login'); setShowTutorial(true); }
                     } else addNotification("Utilizador ou palavra-passe incorretos!", true);
                 } else {
                     if (usersDb[userKey]) return addNotification("Este utilizador já existe!", true);
@@ -481,32 +460,30 @@
             };
 
             const handleOnboardingSubmit = async () => {
-                if (!userName.trim() || !securityAnswerInput.trim()) return addNotification("Por favor, preencha todos os campos!", true);
-                if (!user) return addNotification("🚨 A aguardar ligação ao Firebase. Tente em 2 segundos...", true);
+                if (!userName.trim() || !securityAnswerInput.trim()) return addNotification("Preencha todos os campos!", true);
+                if (!user) return addNotification("🚨 A aguardar ligação...", true);
                 
                 const userKey = usernameInput.toLowerCase().trim();
                 const newUser = { password: passwordInput, name: userName.trim(), securityAnswer: securityAnswerInput.toLowerCase().trim(), logs: {}, products: [] };
-
                 setUsersDb(prev => ({ ...prev, [userKey]: newUser }));
                 
                 try {
                     const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', userKey);
                     await setDoc(userRef, newUser);
                     addNotification("Conta criada com sucesso! Bem-vinda.");
-                    setCurrentUsername(userKey); setIsNavOpen(false); setAuthStep('app'); setActiveTab('home'); setStatsPeriod('ontem'); setActiveDateStr(getTodayStr()); setSelectedHistoryDate(getTodayStr()); setRefreshTrigger(p=>p+1); setShowTutorial(true);
-                } catch (e) {
-                    console.error("Erro ao salvar no Firestore:", e); addNotification(`🚨 Erro ao guardar conta. Regras bloqueadas.`, true);
-                }
+                    setCurrentUsername(userKey); setIsNavOpen(false); setAuthStep('app'); setActiveTab('home'); setStatsPeriod('ontem'); setActiveDateStr(getTodayStr()); setSelectedHistoryDate(getTodayStr()); setRefreshTrigger(p=>p+1); 
+                    setTutorialMode('login'); setShowTutorial(true);
+                } catch (e) { addNotification(`Erro ao guardar conta.`, true); }
             };
 
             const handleRecoverySubmit = () => {
-                if (!usernameInput || !securityAnswerInput) return addNotification("Preencha o utilizador e o nome da avó!", true);
+                if (!usernameInput || !securityAnswerInput) return addNotification("Preencha utilizador e resposta!", true);
                 const userKey = usernameInput.toLowerCase().trim();
                 const userAccount = usersDb[userKey];
                 if (userAccount && userAccount.securityAnswer === securityAnswerInput.toLowerCase().trim()) {
                     addNotification(`A sua palavra-passe é: ${userAccount.password}`);
                     setTimeout(() => { setAuthStep('auth'); setRefreshTrigger(p=>p+1); }, 4000); 
-                } else addNotification("Utilizador ou resposta secreta incorretos.", true);
+                } else addNotification("Incorretos.", true);
             };
 
             const handleLogout = () => {
@@ -515,67 +492,72 @@
                 setLogs({}); setProducts([]); setActiveDateStr(getTodayStr()); setSelectedHistoryDate(getTodayStr());
                 setExtraInput({ type: '', duration: '' }); setSalonInput({ procedures: [], mood: 'perfeito' });
                 setNewProductInput({ name: '', time: '08:00' }); setIsAddingProduct(false); setShowTutorial(false); setPastProductPrompt(null); setDontShowTutorialAgain(false);
-                setIsSettingsOpen(false);
-                setRefreshTrigger(p=>p+1);
+                setIsSettingsOpen(false); setRefreshTrigger(p=>p+1);
             };
 
+            // SETTINGS FLIP LOGIC
             const handleOpenSettings = () => {
+                setSettingsStep('menu');
                 setEditNameInput(userName);
                 setEditPasswordInput(usersDb[currentUsername]?.password || '');
                 setIsSettingsOpen(true);
             };
 
-            const handleCloseSettings = async () => {
+            const handleSettingsNav = (step) => {
+                setIsSettingsFlipping(true);
+                setTimeout(() => {
+                    setSettingsStep(step);
+                    setIsSettingsFlipping(false);
+                }, 300);
+            };
+
+            const handleCloseSettings = () => {
                 setIsClosingSettings(true);
-                setTimeout(async () => {
+                setTimeout(() => {
                     setIsSettingsOpen(false);
                     setIsClosingSettings(false);
-                    
-                    let updates = {};
-                    let changed = false;
-                    if (editNameInput.trim() && editNameInput.trim() !== userName) {
-                        updates.name = editNameInput.trim();
-                        setUserName(editNameInput.trim());
-                        changed = true;
-                    }
-                    if (editPasswordInput.trim() && editPasswordInput.trim() !== usersDb[currentUsername].password) {
-                        updates.password = editPasswordInput.trim();
-                        changed = true;
-                    }
+                    setSettingsStep('menu');
+                }, 300);
+            };
 
-                    if (changed) {
-                        setUsersDb(prev => ({ ...prev, [currentUsername]: { ...prev[currentUsername], ...updates } }));
-                        if (user) {
-                            try {
-                                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
-                                await setDoc(userRef, updates, { merge: true });
-                                addNotification("Definições guardadas com sucesso!");
-                            } catch(e) { console.error(e); addNotification("Erro ao atualizar definições no servidor.", true); }
-                        }
+            const handleSaveSetting = async (type) => {
+                let updates = {};
+                if (type === 'name' && editNameInput.trim() && editNameInput.trim() !== userName) {
+                    updates.name = editNameInput.trim();
+                    setUserName(editNameInput.trim());
+                } else if (type === 'password' && editPasswordInput.trim() && editPasswordInput.trim() !== usersDb[currentUsername].password) {
+                    updates.password = editPasswordInput.trim();
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    setUsersDb(prev => ({ ...prev, [currentUsername]: { ...prev[currentUsername], ...updates } }));
+                    if (user) {
+                        try {
+                            const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
+                            await setDoc(userRef, updates, { merge: true });
+                            addNotification("Atualizado com sucesso!");
+                        } catch(e) { addNotification("Erro ao atualizar.", true); }
                     }
-                }, 350);
+                }
+                handleCloseSettings();
             };
 
             const handleCloseTutorial = async () => {
                 setShowTutorial(false);
-                if (dontShowTutorialAgain && currentUsername && user) {
+                if (tutorialMode === 'login' && dontShowTutorialAgain && currentUsername && user) {
                     setUsersDb(prev => ({...prev, [currentUsername]: {...prev[currentUsername], hideTutorial: true}}));
                     try {
                         const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUsername);
                         await setDoc(userRef, { hideTutorial: true }, { merge: true });
-                    } catch(e) { console.error(e); }
+                    } catch(e) {}
                 }
             };
 
             const handleCloseCustomDate = () => {
                 setIsClosingCustomDate(true);
-                setTimeout(() => {
-                    setIsCustomDateOpen(false);
-                    setIsClosingCustomDate(false);
-                }, 350);
+                setTimeout(() => { setIsCustomDateOpen(false); setIsClosingCustomDate(false); }, 350);
             };
 
-            // Voltar para hoje ao navegar no menu e ir para o topo
             const handleNavMenuClick = (tab) => {
                 setActiveTab(tab);
                 setIsNavOpen(false);
@@ -603,29 +585,15 @@
 
             const activeIndex = TABS_ORDER.indexOf(activeTab);
 
-            // ADICIONAR PRODUTO
             const handleAddProduct = () => {
                 if (newProductInput.name) {
-                    const newId = Date.now().toString();
-                    const newProd = { 
-                        id: newId, 
-                        name: newProductInput.name, 
-                        time: newProductInput.time, 
-                        createdAt: activeDateStr
-                    };
-
+                    const newProd = { id: Date.now().toString(), name: newProductInput.name, time: newProductInput.time, createdAt: activeDateStr };
                     if (activeDateStr < realTodayStr) {
-                        setPastProductPrompt(newProd);
-                        setIsAddingProduct(false);
-                        setNewProductInput({ name: '', time: '08:00' });
+                        setPastProductPrompt(newProd); setIsAddingProduct(false); setNewProductInput({ name: '', time: '08:00' });
                     } else {
-                        setProducts([...products, newProd]);
-                        setNewProductInput({ name: '', time: '08:00' });
-                        setIsAddingProduct(false);
+                        setProducts([...products, newProd]); setNewProductInput({ name: '', time: '08:00' }); setIsAddingProduct(false);
                     }
-                } else {
-                    addNotification("Preencha o nome do produto!", true);
-                }
+                } else addNotification("Preencha o nome do produto!", true);
             };
 
             const handlePastProductDecision = (decision) => {
@@ -634,34 +602,27 @@
                 let newLogs = { ...logs };
 
                 if (decision === 'SINGLE_USE') {
-                    const nextDay = addDaysStr(prod.createdAt, 1);
-                    prod.archivedAt = nextDay;
+                    prod.archivedAt = addDaysStr(prod.createdAt, 1);
                     finalProducts.push(prod);
                 } else if (decision === 'CHECK_ALL' || decision === 'ADD_ONLY') {
                     finalProducts.push(prod);
                     if (decision === 'CHECK_ALL') {
                         let currDate = prod.createdAt;
                         while (currDate <= realTodayStr) {
-                            const existingLog = newLogs[currDate] || {};
-                            const existingRoutine = existingLog.routine || {};
-                            newLogs[currDate] = { ...existingLog, routine: { ...existingRoutine, [prod.id]: true } };
+                            newLogs[currDate] = { ...(newLogs[currDate] || {}), routine: { ...((newLogs[currDate] || {}).routine || {}), [prod.id]: true } };
                             currDate = addDaysStr(currDate, 1);
                         }
                     }
                 }
-                
                 setProducts(finalProducts);
                 if (decision === 'CHECK_ALL') setLogs(newLogs);
                 setPastProductPrompt(null);
-                addNotification("Produto configurado com sucesso!");
+                addNotification("Produto configurado!");
             };
 
             const handleRemoveProduct = (prodId) => {
-                if (activeDateStr === realTodayStr) {
-                    setProducts(products.map(p => p.id === prodId ? { ...p, archivedAt: activeDateStr } : p));
-                } else {
-                    setProducts(products.map(p => p.id === prodId ? { ...p, hiddenDates: [...(p.hiddenDates || []), activeDateStr] } : p));
-                }
+                if (activeDateStr === realTodayStr) setProducts(products.map(p => p.id === prodId ? { ...p, archivedAt: activeDateStr } : p));
+                else setProducts(products.map(p => p.id === prodId ? { ...p, hiddenDates: [...(p.hiddenDates || []), activeDateStr] } : p));
             };
 
             const toggleSalonProcedure = (proc) => {
@@ -680,62 +641,35 @@
             };
 
             const stats = useMemo(() => {
-                const today = new Date();
-                let treatUses = 0, productUsed = 0, productTotal = 0;
-                let heatDays = 0, protectedDays = 0, totalSalon = 0, totalExtrasMins = 0;
-                let totalWashes = 0; 
-                
+                let treatUses = 0, productUsed = 0, productTotal = 0, heatDays = 0, protectedDays = 0, totalSalon = 0, totalExtrasMins = 0, totalWashes = 0; 
                 let countCorte = 0, countCor = 0, countEscova = 0, countReconstrucao = 0;
-
                 const statusCounts = {}, salonMoodCounts = {}, maskTypeCounts = {};
 
                 let datesToCheck = [];
-                if (statsPeriod === 'ontem') {
-                    datesToCheck.push(addDaysStr(getTodayStr(), -1));
-                } else if (typeof statsPeriod === 'number') {
-                    for (let i = 0; i < statsPeriod; i++) {
-                        datesToCheck.push(addDaysStr(getTodayStr(), -i));
-                    }
-                } else if (statsPeriod === 'custom') {
-                    let curr = new Date(customStart);
-                    let end = new Date(customEnd);
-                    while (curr <= end) {
-                        datesToCheck.push(dateObjToStr(curr));
-                        curr.setDate(curr.getDate() + 1);
-                    }
+                if (statsPeriod === 'ontem') datesToCheck.push(addDaysStr(getTodayStr(), -1));
+                else if (typeof statsPeriod === 'number') { for (let i = 0; i < statsPeriod; i++) datesToCheck.push(addDaysStr(getTodayStr(), -i)); }
+                else if (statsPeriod === 'custom') {
+                    let curr = new Date(customStart), end = new Date(customEnd);
+                    while (curr <= end) { datesToCheck.push(dateObjToStr(curr)); curr.setDate(curr.getDate() + 1); }
                 }
 
                 datesToCheck.forEach(dateStr => {
                     const l = logs[dateStr];
-
-                    const activeProds = products.filter(p => 
-                        (!p.createdAt || p.createdAt <= dateStr) && 
-                        (!p.archivedAt || p.archivedAt > dateStr) &&
-                        !(p.hiddenDates && p.hiddenDates.includes(dateStr))
-                    );
+                    const activeProds = products.filter(p => (!p.createdAt || p.createdAt <= dateStr) && (!p.archivedAt || p.archivedAt > dateStr) && !(p.hiddenDates && p.hiddenDates.includes(dateStr)));
                     
                     if (l) {
                         if (l.washed) totalWashes++;
-                        if (l.treatment?.minutes) { 
-                            treatUses++; 
-                            if(l.treatment.type) maskTypeCounts[l.treatment.type] = (maskTypeCounts[l.treatment.type] || 0) + 1;
-                        }
-                        
+                        if (l.treatment?.minutes) { treatUses++; if(l.treatment.type) maskTypeCounts[l.treatment.type] = (maskTypeCounts[l.treatment.type] || 0) + 1; }
                         productTotal += activeProds.length;
                         activeProds.forEach(p => { if (l.routine?.[p.id]) productUsed++; });
-
                         if (l.heat?.active) { heatDays++; if (l.heat.protectant) protectedDays++; }
                         l.extras?.forEach(ex => { totalExtrasMins += ex.duration; });
-
                         if (l.salon?.procedures) {
                             totalSalon++;
-                            let procs = Array.isArray(l.salon.procedures) ? l.salon.procedures : (l.salon.procedures || '').split(', ');
-                            procs.forEach(p => {
+                            (Array.isArray(l.salon.procedures) ? l.salon.procedures : (l.salon.procedures || '').split(', ')).forEach(p => {
                                 const pText = p.toLowerCase();
-                                if (pText.includes('cort')) countCorte++;
-                                if (pText.includes('pint') || pText.includes('madeix') || pText.includes('luzes')) countCor++;
-                                if (pText.includes('escov')) countEscova++;
-                                if (pText.includes('reconstru')) countReconstrucao++;
+                                if (pText.includes('cort')) countCorte++; if (pText.includes('pint') || pText.includes('madeix') || pText.includes('luzes')) countCor++;
+                                if (pText.includes('escov')) countEscova++; if (pText.includes('reconstru')) countReconstrucao++;
                             });
                             if (l.salon.mood) salonMoodCounts[l.salon.mood] = (salonMoodCounts[l.salon.mood] || 0) + 1;
                         }
@@ -748,82 +682,52 @@
                 const topStatus = HAIR_STATUS.find(m => m.id === topStatusId) || HAIR_STATUS.find(m => m.id === 'normal'); 
                 const topSalonMoodId = Object.keys(salonMoodCounts).sort((a,b) => salonMoodCounts[b] - salonMoodCounts[a])[0];
                 const topSalonMood = HAIR_STATUS.find(m => m.id === topSalonMoodId) || null;
-
                 const topMasks = Object.entries(maskTypeCounts).sort((a,b) => b[1] - a[1]).slice(0, 2).map(m => TREATMENT_TYPES.find(t => t.id === m[0])?.label || m[0]);
 
-                return { 
-                    treatUses, routineAdherence, heatDays, protectedDays, totalSalon, 
-                    countCorte, countCor, countEscova, countReconstrucao, totalExtrasMins, 
-                    totalWashes, topStatus, topSalonMood, topMasks, daysCount: datesToCheck.length 
-                };
+                return { treatUses, routineAdherence, heatDays, protectedDays, totalSalon, countCorte, countCor, countEscova, countReconstrucao, totalExtrasMins, totalWashes, topStatus, topSalonMood, topMasks, daysCount: datesToCheck.length };
             }, [statsPeriod, logs, products, customStart, customEnd]);
 
             const getInsightFor = (type) => {
                 switch(type) {
                     case 'status': 
-                        const goodStatuses = ['normal', 'hidratado', 'perfeito'];
-                        if (goodStatuses.includes(stats.topStatus.id)) return "O seu cabelo tem estado incrível! A sua rotina atual está claramente a dar resultados positivos.";
-                        if (stats.topStatus.id === 'oleoso') return "A oleosidade é uma proteção natural do couro cabeludo. Evite lavar com água muito quente e não esfregue o couro com força, pois isso causa 'efeito rebote' (produz mais óleo para compensar). Prefira shampoos equilibrantes e aplique óleos só nas pontas.";
-                        return "Parece que os fios andam a pedir socorro. Aumente a frequência das máscaras de nutrição e umectação com óleos para devolver a maleabilidade.";
-                    
+                        if (['normal', 'hidratado', 'perfeito'].includes(stats.topStatus.id)) return "O seu cabelo tem estado incrível! A sua rotina atual está claramente a dar resultados positivos.";
+                        if (stats.topStatus.id === 'oleoso') return "Evite lavar com água muito quente e não esfregue o couro com força para evitar 'efeito rebote'. Prefira shampoos equilibrantes.";
+                        return "Parece que os fios andam a pedir socorro. Aumente a frequência das máscaras de nutrição e umectação.";
                     case 'washed':
-                        if (stats.totalWashes === 0) return "Não registou nenhuma lavagem neste período. É crucial lavar o couro cabeludo regularmente para evitar a obstrução dos folículos, caspa e queda de cabelo.";
+                        if (stats.totalWashes === 0) return "Não registou nenhuma lavagem neste período. É crucial lavar o couro cabeludo regularmente.";
                         const freq = (stats.daysCount / stats.totalWashes).toFixed(1);
-                        if (freq < 1.5) {
-                            return `Lavou o cabelo quase todos os dias (média de 1 lavagem a cada ${freq.replace('.0', '')} dias). Lavar excessivamente pode retirar a oleosidade natural, causando ressecamento das pontas ou efeito rebote na raiz. Avalie se o seu cabelo realmente necessita de lavagem diária.`;
-                        } else if (freq >= 1.5 && freq <= 3.5) {
-                            return `Frequência ideal! (média de 1 lavagem a cada ${freq.replace('.0', '')} dias). Manter a lavagem a cada 2 a 3 dias ajuda a equilibrar a oleosidade do couro cabeludo sem ressecar o comprimento dos fios.`;
-                        } else {
-                            return `Lavagem pouco frequente (média de 1 lavagem a cada ${freq.replace('.0', '')} dias). Passar muitos dias sem lavar pode acumular resíduos, suor e sebo no couro cabeludo, o que enfraquece a raiz e retarda o crescimento.`;
-                        }
-
+                        if (freq < 1.5) return `Lavou o cabelo quase todos os dias (média 1x a cada ${freq.replace('.0', '')} dias). Avalie se necessita de lavagem diária.`;
+                        if (freq >= 1.5 && freq <= 3.5) return `Frequência ideal! (média 1x a cada ${freq.replace('.0', '')} dias). Ajuda a equilibrar a oleosidade.`;
+                        return `Lavagem pouco frequente (média 1x a cada ${freq.replace('.0', '')} dias). Pode acumular resíduos e enfraquecer a raiz.`;
                     case 'routine': 
-                        if (stats.routineAdherence === null) return "Não configurou ou não teve produtos ativos no seu uso diário neste período selecionado.";
-                        return stats.routineAdherence === 100 ? "Perfeito! A sua adesão aos produtos diários está no máximo. A constância é o maior segredo capilar." : stats.routineAdherence > 80 ? "Disciplina de ferro! Tem usado os seus produtos quase todos os dias." : "Tem esquecido de aplicar os seus produtos diários. Sem constância, os produtos não conseguem entregar o resultado prometido!";
-                    
+                        if (stats.routineAdherence === null) return "Sem produtos ativos neste período.";
+                        return stats.routineAdherence === 100 ? "Perfeito! A constância é o maior segredo capilar." : stats.routineAdherence > 80 ? "Disciplina de ferro! Tem usado os seus produtos quase todos os dias." : "Tem esquecido de aplicar os seus produtos diários!";
                     case 'treatment': 
-                        let maskMsg = `Utilizou máscaras ${stats.treatUses} vez(es) neste período. `;
-                        if(stats.treatUses > 0) {
-                            if(stats.topMasks.length > 0) maskMsg += `As suas etapas favoritas foram: ${stats.topMasks.join(' e ')}. Mantenha o equilíbrio do cronograma para evitar quebra.`;
-                            else maskMsg += "Lembre-se de intercalar entre Hidratação, Nutrição e Reconstrução.";
-                        } else {
-                            maskMsg = "Não registou nenhuma máscara neste período. O cabelo perde água e massa diariamente, precisa de as repor semanalmente!";
-                        }
+                        let maskMsg = `Utilizou máscaras ${stats.treatUses} vez(es). `;
+                        if(stats.treatUses > 0) maskMsg += stats.topMasks.length > 0 ? `Favoritas: ${stats.topMasks.join(' e ')}.` : "Alterne as etapas do cronograma.";
+                        else maskMsg = "Não registou nenhuma máscara neste período. O cabelo perde água e massa diariamente!";
                         return maskMsg;
-                    
                     case 'heat': 
-                        if (stats.heatDays === 0) return "Excelente! Não usou calor neste período. Secar ao natural é a melhor escolha para manter as pontas cheias e saudáveis.";
-                        if (stats.protectedDays === stats.heatDays) return `Perfeito! Usou fontes de calor em ${stats.heatDays} dias, mas protegeu SEMPRE o fio. O protetor térmico cria uma película invisível que salva o cabelo da quebra.`;
-                        if (stats.protectedDays > 0) return `Atenção! Usou calor em ${stats.heatDays} dias, mas esqueceu o protetor em alguns. O calor direto sem proteção causa danos irreversíveis na hora!`;
-                        return `Alerta máximo! Usou secador/chapinha em ${stats.heatDays} dias e NÃO aplicou proteção térmica em nenhum. Está a cozinhar a queratina do seu cabelo, introduza um protetor urgente!`;
-                    
+                        if (stats.heatDays === 0) return "Excelente! Secar ao natural é a melhor escolha para manter as pontas cheias e saudáveis.";
+                        if (stats.protectedDays === stats.heatDays) return `Perfeito! Usou fontes de calor em ${stats.heatDays} dias, mas protegeu SEMPRE o fio.`;
+                        if (stats.protectedDays > 0) return `Atenção! Usou calor em ${stats.heatDays} dias, mas esqueceu o protetor em alguns. O calor direto sem proteção causa danos irreversíveis!`;
+                        return `Alerta máximo! Usou calor em ${stats.heatDays} dias e NÃO aplicou proteção térmica em nenhum. Introduza um protetor urgente!`;
                     case 'salon': 
-                        if (stats.totalSalon === 0) return `Ainda não tirou um momento para se mimar no salão neste período. Agendar um dia de puro autocuidado faz maravilhas pela autoestima!`;
-                        
+                        if (stats.totalSalon === 0) return `Ainda não tirou um momento para se mimar no salão neste período.`;
                         let msgs = [];
                         if (stats.countCor > 0 && stats.countReconstrucao > 0) msgs.push(`Excelente escolha! Combinou química (cor/madeixas) com reconstrução no salão, protegendo a massa estrutural do fio.`);
-                        else if (stats.countCor > 0) msgs.push(`Fez química sem registar reconstrução profunda no salão. A química deixa o fio muito poroso, por isso reforce os tratamentos em casa nas próximas semanas!`);
-                        
-                        if (stats.countCorte > 0) msgs.push(`Manter o corte em dia é o melhor tratamento contra o afinamento das pontas e devolve o movimento natural.`);
-                        if (stats.countEscova > 0) msgs.push(`O cabelo com styling/escova fica com um brilho incrível temporário. Lembre-se de usar uma boa máscara na próxima lavagem para repor a água perdida.`);
-                        
-                        if (msgs.length === 0) return `Tirou ${stats.totalSalon} dia(s) para um merecido momento nas mãos de profissionais! O autocuidado reflete-se na sua confiança.`;
-                        
+                        else if (stats.countCor > 0) msgs.push(`Fez química sem registar reconstrução profunda no salão. Reforce os tratamentos em casa!`);
+                        if (stats.countCorte > 0) msgs.push(`Manter o corte em dia é o melhor tratamento contra o afinamento das pontas.`);
+                        if (stats.countEscova > 0) msgs.push(`O styling dá um brilho incrível. Use máscara na próxima lavagem para repor a água.`);
+                        if (msgs.length === 0) return `Tirou ${stats.totalSalon} dia(s) para um merecido momento nas mãos de profissionais!`;
                         return msgs.join(" ");
-                    
-                    case 'extras': return "Massagens no couro cabeludo estimulam a circulação sanguínea, levando mais nutrientes à raiz e acelerando o crescimento. Continue!";
+                    case 'extras': return "Massagens no couro cabeludo estimulam a circulação, acelerando o crescimento. Continue!";
                     default: return "Continue a acompanhar o seu Diário para mais dicas.";
                 }
             };
 
-            const openModal = (type, title, icon, bgColor, iconColor, value, valColor) => {
-                setActiveStatModal({ type, title, icon, bgColor, iconColor, value, valColor, insight: getInsightFor(type) });
-            };
-
-            const closeModal = () => {
-                setIsClosingModal(true);
-                setTimeout(() => { setActiveStatModal(null); setIsClosingModal(false); }, 350);
-            };
+            const openModal = (type, title, icon, bgColor, iconColor, value, valColor) => setActiveStatModal({ type, title, icon, bgColor, iconColor, value, valColor, insight: getInsightFor(type) });
+            const closeModal = () => { setIsClosingModal(true); setTimeout(() => { setActiveStatModal(null); setIsClosingModal(false); }, 350); };
 
             const currentYear = viewingMonth.getFullYear();
             const currentMonthIndex = viewingMonth.getMonth();
@@ -832,11 +736,7 @@
             const blanks = Array.from({ length: firstDayOfWeek }, (_, i) => i);
             const monthDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-            const activeProductsForDiary = products.filter(p => 
-                (!p.createdAt || p.createdAt <= activeDateStr) && 
-                (!p.archivedAt || p.archivedAt > activeDateStr) &&
-                !(p.hiddenDates && p.hiddenDates.includes(activeDateStr))
-            );
+            const activeProductsForDiary = products.filter(p => (!p.createdAt || p.createdAt <= activeDateStr) && (!p.archivedAt || p.archivedAt > activeDateStr) && !(p.hiddenDates && p.hiddenDates.includes(activeDateStr)));
 
             const TabHeader = ({ titleContent, showOptions = false }) => (
                 <div className="flex justify-between items-start mb-6 cascade-item" style={{animationDelay: '0ms'}}>
@@ -844,71 +744,38 @@
                     <div className={`flex items-center gap-2 ml-4 transition-opacity ${showOptions ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                         {deferredPrompt && <button onClick={() => deferredPrompt.prompt()} className={`${colors.primary} ${colors.primaryText} p-3 rounded-full shadow-sm`}><i className="ph-bold ph-download-simple text-xl"></i></button>}
                         <button onClick={toggleTheme} className={`${colors.yellow} p-3 rounded-full shadow-sm`}><i className={`ph-fill ${isDarkMode ? 'ph-moon' : 'ph-sun'} ${colors.yellowText} text-xl`}></i></button>
-                        <button onClick={() => setShowTutorial(true)} className={`bg-blue-100 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400 p-3 rounded-full shadow-sm`}><i className="ph-bold ph-info text-xl"></i></button>
-                        <button onClick={handleOpenSettings} className={`${colors.card} border ${colors.border} ${colors.textStrong} p-3 rounded-full shadow-sm`}><i className="ph-bold ph-gear text-xl"></i></button>
+                        <button onClick={() => { setTutorialMode('manual'); setShowTutorial(true); }} className={`bg-blue-100 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400 p-3 rounded-full shadow-sm`}><i className="ph-bold ph-info text-xl"></i></button>
+                        <button onClick={handleLogout} className={`${colors.card} border ${colors.border} p-3 rounded-full text-red-400 shadow-sm`}><i className="ph-bold ph-sign-out text-xl"></i></button>
                     </div>
                 </div>
             );
 
-            // TELA DE AUTENTICAÇÃO COM CASCATA FLUÍDA
             if (authStep === 'auth' || authStep === 'onboarding' || authStep === 'recovery') {
                 return (
-                    <div 
-                        className={`min-h-[100dvh] w-full ${colors.bg} flex items-center justify-center p-4 transition-colors overflow-hidden`}
-                        onTouchStart={handlePullTouchStart}
-                        onTouchMove={handlePullTouchMove}
-                        onTouchEnd={handlePullTouchEnd}
-                    >
-                        {/* ÍCONE PULL TO REFRESH */}
+                    <div className={`min-h-[100dvh] w-full ${colors.bg} flex items-center justify-center p-4 transition-colors overflow-hidden`} onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}>
                         <div className={`absolute top-0 left-0 w-full flex justify-center items-center pointer-events-none transition-opacity duration-300 z-50 ${pullDistance > 20 ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translateY(${Math.min(pullDistance, 90)}px)` }}>
-                            <div className={`${colors.card} rounded-full p-2.5 shadow-lg border ${colors.border}`}>
-                                <i className={`ph-bold ph-arrow-down ${colors.textStrong} text-xl transition-transform duration-300 ${pullDistance > 110 ? 'rotate-180 text-blue-500' : ''}`}></i>
-                            </div>
+                            <div className={`${colors.card} rounded-full p-2.5 shadow-lg border ${colors.border}`}><i className={`ph-bold ph-arrow-down ${colors.textStrong} text-xl transition-transform duration-300 ${pullDistance > 110 ? 'rotate-180 text-blue-500' : ''}`}></i></div>
                         </div>
 
                         <div key={`auth-${refreshTrigger}`} className={`max-w-md w-full relative ${colors.bg} shadow-2xl flex flex-col rounded-[2.5rem] border ${colors.border}`}>
                             
                             {authStep === 'auth' && (
                                 <div className="p-8 flex flex-col items-center text-center">
-                                    <div className="flex w-full justify-end items-center absolute top-6 right-6 cascade-item" style={{animationDelay: '0ms'}}>
-                                        <button onClick={toggleTheme} className={`${colors.yellow} p-3 rounded-full shadow-sm`}><i className={`ph-fill ${isDarkMode ? 'ph-moon' : 'ph-sun'} ${colors.yellowText} text-xl`}></i></button>
-                                    </div>
-                                    
-                                    <div className="mt-8 cascade-item" style={{animationDelay: '120ms'}}>
-                                        <div className={`w-24 h-24 mx-auto mb-4 rounded-full ${colors.primary} flex items-center justify-center`}><i className={`ph-fill ph-flower-lotus ${colors.primaryText} text-5xl block`}></i></div>
-                                        <h1 className={`text-4xl font-black ${colors.text} font-serif tracking-tight`}>Meu Cabelo</h1>
-                                        <p className={`text-sm ${colors.textLight} mt-2`}>O seu diário de rotina e saúde capilar.</p>
-                                    </div>
-
+                                    <div className="flex w-full justify-end items-center absolute top-6 right-6 cascade-item" style={{animationDelay: '0ms'}}><button onClick={toggleTheme} className={`${colors.yellow} p-3 rounded-full shadow-sm`}><i className={`ph-fill ${isDarkMode ? 'ph-moon' : 'ph-sun'} ${colors.yellowText} text-xl`}></i></button></div>
+                                    <div className="mt-8 cascade-item" style={{animationDelay: '120ms'}}><div className={`w-24 h-24 mx-auto mb-4 rounded-full ${colors.primary} flex items-center justify-center`}><i className={`ph-fill ph-flower-lotus ${colors.primaryText} text-5xl block`}></i></div><h1 className={`text-4xl font-black ${colors.text} font-serif tracking-tight`}>Meu Cabelo</h1><p className={`text-sm ${colors.textLight} mt-2`}>O seu diário de rotina e saúde capilar.</p></div>
                                     <div className="w-full space-y-4 mt-10 cascade-item" style={{animationDelay: '240ms'}}>
-                                        <div className="flex w-full mb-6 p-1 bg-black/5 dark:bg-white/5 rounded-2xl">
-                                            <button onClick={() => { setIsLoginFlow(true); setUsernameInput(''); setPasswordInput(''); }} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${isLoginFlow ? colors.card + ' shadow-sm ' + colors.textStrong : colors.textMuted}`}>Entrar</button>
-                                            <button onClick={() => { setIsLoginFlow(false); setUsernameInput(''); setPasswordInput(''); }} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${!isLoginFlow ? colors.card + ' shadow-sm ' + colors.textStrong : colors.textMuted}`}>Registe-se</button>
-                                        </div>
-                                        <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}>
-                                            <i className={`ph-fill ph-user ${colors.textLight} text-xl`}></i><input type="text" placeholder="Utilizador" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
-                                        </div>
-                                        <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}>
-                                            <i className={`ph-fill ph-lock-key ${colors.textLight} text-xl`}></i><input type="password" placeholder="Palavra-passe" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
-                                        </div>
+                                        <div className="flex w-full mb-6 p-1 bg-black/5 dark:bg-white/5 rounded-2xl"><button onClick={() => { setIsLoginFlow(true); setUsernameInput(''); setPasswordInput(''); }} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${isLoginFlow ? colors.card + ' shadow-sm ' + colors.textStrong : colors.textMuted}`}>Entrar</button><button onClick={() => { setIsLoginFlow(false); setUsernameInput(''); setPasswordInput(''); }} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${!isLoginFlow ? colors.card + ' shadow-sm ' + colors.textStrong : colors.textMuted}`}>Registe-se</button></div>
+                                        <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}><i className={`ph-fill ph-user ${colors.textLight} text-xl`}></i><input type="text" placeholder="Utilizador" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} /></div>
+                                        <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}><i className={`ph-fill ph-lock-key ${colors.textLight} text-xl`}></i><input type="password" placeholder="Palavra-passe" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} /></div>
                                     </div>
-
-                                    <Button colors={colors} variant="primary" onClick={handleAuthSubmit} className="w-full py-4 mt-6 text-lg cascade-item" style={{animationDelay: '360ms'}}>
-                                        {isLoginFlow ? 'Entrar no Diário' : 'Criar Conta'}
-                                    </Button>
-
-                                    <div className="flex flex-col items-center gap-2 mt-4 cascade-item" style={{animationDelay: '480ms'}}>
-                                        {isLoginFlow && <button onClick={() => { setAuthStep('recovery'); setUsernameInput(''); setPasswordInput(''); }} className={`text-xs font-bold ${colors.primaryText} hover:underline`}>Esqueceu a palavra-passe?</button>}
-                                    </div>
+                                    <Button colors={colors} variant="primary" onClick={handleAuthSubmit} className="w-full py-4 mt-6 text-lg cascade-item" style={{animationDelay: '360ms'}}>{isLoginFlow ? 'Entrar no Diário' : 'Criar Conta'}</Button>
+                                    <div className="flex flex-col items-center gap-2 mt-4 cascade-item" style={{animationDelay: '480ms'}}>{isLoginFlow && <button onClick={() => { setAuthStep('recovery'); setUsernameInput(''); setPasswordInput(''); }} className={`text-xs font-bold ${colors.primaryText} hover:underline`}>Esqueceu a palavra-passe?</button>}</div>
                                 </div>
                             )}
 
                             {authStep === 'onboarding' && (
                                 <div className="p-8 text-center">
-                                    <div className="cascade-item" style={{animationDelay: '120ms'}}>
-                                        <i className={`ph-fill ph-sparkle ${colors.primaryText} text-4xl mb-4 bg-[#D2E0D9] p-4 rounded-full inline-block`}></i>
-                                        <h1 className={`text-2xl font-bold ${colors.text} font-serif`}>Como devemos chamar-lhe?</h1>
-                                    </div>
+                                    <div className="cascade-item" style={{animationDelay: '120ms'}}><i className={`ph-fill ph-sparkle ${colors.primaryText} text-4xl mb-4 bg-[#D2E0D9] p-4 rounded-full inline-block`}></i><h1 className={`text-2xl font-bold ${colors.text} font-serif`}>Como devemos chamar-lhe?</h1></div>
                                     <div className="space-y-4 mt-8 cascade-item" style={{animationDelay: '240ms'}}>
                                         <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}><i className={`ph-fill ph-user ${colors.textLight} text-xl`}></i><input type="text" placeholder="O seu nome (ex: Joana)" value={userName} onChange={e => setUserName(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} /></div>
                                         <div className="text-left pt-2 pb-1"><label className={`text-sm font-bold ${colors.textMuted} ml-2`}>Pergunta para recuperação de senha:</label></div>
@@ -921,22 +788,15 @@
                             {authStep === 'recovery' && (
                                 <div className="p-8 text-center">
                                     <button onClick={() => { setAuthStep('auth'); setUsernameInput(''); setSecurityAnswerInput(''); }} className={`absolute top-6 left-6 ${colors.textLight} hover:${colors.textStrong} cascade-item`} style={{animationDelay: '0ms'}}><i className="ph-bold ph-arrow-left text-xl"></i></button>
-                                    
-                                    <div className="cascade-item" style={{animationDelay: '120ms'}}>
-                                        <i className={`ph-fill ph-lock-key ${colors.primaryText} text-4xl mb-4 mt-4 bg-[#D2E0D9] p-4 rounded-full inline-block mx-auto`}></i>
-                                        <h1 className={`text-2xl font-bold ${colors.text} font-serif mb-6`}>Recuperar Palavra-passe</h1>
-                                    </div>
-                                    
+                                    <div className="cascade-item" style={{animationDelay: '120ms'}}><i className={`ph-fill ph-lock-key ${colors.primaryText} text-4xl mb-4 mt-4 bg-[#D2E0D9] p-4 rounded-full inline-block mx-auto`}></i><h1 className={`text-2xl font-bold ${colors.text} font-serif mb-6`}>Recuperar Palavra-passe</h1></div>
                                     <div className="space-y-4 cascade-item" style={{animationDelay: '240ms'}}>
                                         <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}><i className={`ph-fill ph-user ${colors.textLight} text-xl`}></i><input type="text" placeholder="O seu Utilizador" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} /></div>
                                         <div className="text-left mt-4 mb-2"><label className={`text-sm font-bold ${colors.textMuted} ml-2`}>Responda à pergunta de segurança:</label></div>
                                         <div className={`flex items-center ${colors.card} px-4 py-3 rounded-2xl border ${colors.border}`}><i className={`ph-fill ph-question ${colors.textLight} text-xl`}></i><input type="text" placeholder="Qual o nome da sua avó?" value={securityAnswerInput} onChange={e => setSecurityAnswerInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} /></div>
                                     </div>
-
                                     <Button colors={colors} variant="primary" onClick={handleRecoverySubmit} className="w-full py-4 mt-8 text-lg cascade-item" style={{animationDelay: '360ms'}}>Recuperar</Button>
                                 </div>
                             )}
-
                         </div>
                         <div className="absolute top-4 w-full px-4 z-50 flex flex-col gap-2 pointer-events-none max-w-md mx-auto">
                             {notifications.map(n => <div key={n.id} className={`${n.isError ? 'bg-red-500/90 border-red-600' : colors.notification} p-4 rounded-2xl flex items-center shadow-lg pointer-events-auto border animate-in`}><i className={`ph-fill ${n.isError ? 'ph-warning-circle text-white' : 'ph-info text-blue-500'} mr-2`}></i><p className={`font-bold ${n.isError ? 'text-white' : colors.textStrong} text-sm`}>{n.msg}</p></div>)}
@@ -946,45 +806,65 @@
             }
 
             return (
-                <div className={`h-[100dvh] w-full ${colors.bg} transition-colors duration-500 overflow-hidden relative`}
-                     onTouchStart={handlePullTouchStart}
-                     onTouchMove={handlePullTouchMove}
-                     onTouchEnd={handlePullTouchEnd}
-                >
+                <div className={`h-[100dvh] w-full ${colors.bg} transition-colors duration-500 overflow-hidden relative`} onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}>
                     
                     {/* ÍCONE PULL TO REFRESH */}
                     <div className={`absolute top-0 left-0 w-full flex justify-center items-center pointer-events-none transition-opacity duration-300 z-50 ${pullDistance > 20 ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translateY(${Math.min(pullDistance, 90)}px)` }}>
-                        <div className={`${colors.card} rounded-full p-2.5 shadow-lg border ${colors.border}`}>
-                            <i className={`ph-bold ph-arrow-down ${colors.textStrong} text-xl transition-transform duration-300 ${pullDistance > 110 ? 'rotate-180 text-blue-500' : ''}`}></i>
-                        </div>
+                        <div className={`${colors.card} rounded-full p-2.5 shadow-lg border ${colors.border}`}><i className={`ph-bold ph-arrow-down ${colors.textStrong} text-xl transition-transform duration-300 ${pullDistance > 110 ? 'rotate-180 text-blue-500' : ''}`}></i></div>
                     </div>
 
-                    {/* OVERLAY DEFINIÇÕES (ENGRENAGEM) */}
+                    {/* OVERLAY DEFINIÇÕES (ENGRENAGEM FLIP CARD) */}
                     {isSettingsOpen && (
                         <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 perspective-container transition-opacity" onClick={handleCloseSettings}>
-                            <div className={`${colors.card} w-full max-w-[340px] rounded-[2rem] p-6 shadow-2xl ${isClosingSettings ? 'flip-card-exit' : 'flip-card-enter'} border border-white/10 flex flex-col`} onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className={`text-xl font-black ${colors.text} font-serif`}><i className="ph-fill ph-gear mr-2"></i>Definições</h2>
-                                    <button onClick={handleCloseSettings} className={`${colors.textLight} hover:${colors.textStrong}`}><i className="ph-bold ph-x text-xl"></i></button>
-                                </div>
-                                <div className="space-y-4 mb-8">
-                                    <div>
-                                        <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>O seu nome</label>
-                                        <div className={`flex items-center ${colors.surface} px-4 py-3 rounded-2xl border ${colors.border}`}>
-                                            <i className={`ph-fill ph-user ${colors.textMuted} text-lg`}></i>
-                                            <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
+                            <div className={`${colors.card} w-full max-w-[340px] rounded-[2rem] p-6 shadow-2xl ${isClosingSettings || isSettingsFlipping ? 'flip-card-exit' : 'flip-card-enter'} border border-white/10 flex flex-col`} onClick={e => e.stopPropagation()}>
+                                
+                                {settingsStep === 'menu' && (
+                                    <>
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h2 className={`text-xl font-black ${colors.text} font-serif`}><i className="ph-fill ph-gear mr-2"></i>Definições</h2>
+                                            <button onClick={handleCloseSettings} className={`${colors.textLight} hover:${colors.textStrong}`}><i className="ph-bold ph-x text-xl"></i></button>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Nova Palavra-passe</label>
-                                        <div className={`flex items-center ${colors.surface} px-4 py-3 rounded-2xl border ${colors.border}`}>
-                                            <i className={`ph-fill ph-lock-key ${colors.textMuted} text-lg`}></i>
-                                            <input type="text" value={editPasswordInput} onChange={e => setEditPasswordInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
+                                        <div className="space-y-3 mb-2">
+                                            <Button onClick={() => handleSettingsNav('name')} variant="outline" colors={colors} className="w-full justify-start py-4"><i className="ph-fill ph-user text-lg mr-2"></i> Mudar o meu Nome</Button>
+                                            <Button onClick={() => handleSettingsNav('password')} variant="outline" colors={colors} className="w-full justify-start py-4"><i className="ph-fill ph-lock-key text-lg mr-2"></i> Alterar Palavra-passe</Button>
                                         </div>
-                                    </div>
-                                </div>
-                                <Button onClick={handleCloseSettings} variant="primary" colors={colors} className="w-full">Guardar e Fechar</Button>
-                                <button onClick={handleLogout} className="mt-4 text-sm font-bold text-red-400 hover:text-red-500 transition-colors">Sair da Conta (Logout)</button>
+                                    </>
+                                )}
+
+                                {settingsStep === 'name' && (
+                                    <>
+                                        <div className="flex items-center mb-6">
+                                            <button onClick={() => handleSettingsNav('menu')} className={`${colors.textLight} hover:${colors.textStrong} mr-3`}><i className="ph-bold ph-arrow-left text-xl"></i></button>
+                                            <h2 className={`text-xl font-black ${colors.text} font-serif`}>Mudar Nome</h2>
+                                        </div>
+                                        <div className="mb-8">
+                                            <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Novo Nome</label>
+                                            <div className={`flex items-center ${colors.surface} px-4 py-3 rounded-2xl border ${colors.border}`}>
+                                                <i className={`ph-fill ph-user ${colors.textMuted} text-lg`}></i>
+                                                <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
+                                            </div>
+                                        </div>
+                                        <Button onClick={() => handleSaveSetting('name')} variant="primary" colors={colors} className="w-full">Guardar Alteração</Button>
+                                    </>
+                                )}
+
+                                {settingsStep === 'password' && (
+                                    <>
+                                        <div className="flex items-center mb-6">
+                                            <button onClick={() => handleSettingsNav('menu')} className={`${colors.textLight} hover:${colors.textStrong} mr-3`}><i className="ph-bold ph-arrow-left text-xl"></i></button>
+                                            <h2 className={`text-xl font-black ${colors.text} font-serif`}>Nova Palavra-passe</h2>
+                                        </div>
+                                        <div className="mb-8">
+                                            <label className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-2 block`}>Palavra-passe</label>
+                                            <div className={`flex items-center ${colors.surface} px-4 py-3 rounded-2xl border ${colors.border}`}>
+                                                <i className={`ph-fill ph-lock-key ${colors.textMuted} text-lg`}></i>
+                                                <input type="text" value={editPasswordInput} onChange={e => setEditPasswordInput(e.target.value)} className={`w-full ml-3 border-none outline-none bg-transparent ${colors.textStrong}`} />
+                                            </div>
+                                        </div>
+                                        <Button onClick={() => handleSaveSetting('password')} variant="primary" colors={colors} className="w-full">Guardar Alteração</Button>
+                                    </>
+                                )}
+
                             </div>
                         </div>
                     )}
@@ -1009,7 +889,7 @@
                         </div>
                     )}
 
-                    {/* OVERLAY TUTORIAL (C/ OPÇÃO DE NÃO MOSTRAR) */}
+                    {/* OVERLAY TUTORIAL (Dicionário) */}
                     {showTutorial && (
                         <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 perspective-container transition-opacity" onClick={handleCloseTutorial}>
                             <div className={`${colors.card} w-full max-w-[340px] rounded-[2rem] p-6 shadow-2xl flip-card-enter border border-white/10 flex flex-col`} onClick={e => e.stopPropagation()}>
@@ -1027,12 +907,14 @@
                                     ))}
                                 </div>
                                 
-                                <div className="flex items-center gap-2 mt-4 mb-3 justify-center">
-                                    <input type="checkbox" id="hideTutorial" checked={dontShowTutorialAgain} onChange={e => setDontShowTutorialAgain(e.target.checked)} className="w-4 h-4 accent-purple-500 rounded-md" />
-                                    <label htmlFor="hideTutorial" className={`text-xs ${colors.textLight} font-bold`}>Não mostrar novamente neste login</label>
-                                </div>
+                                {tutorialMode === 'login' && (
+                                    <div className="flex items-center gap-2 mt-4 mb-3 justify-center">
+                                        <input type="checkbox" id="hideTutorial" checked={dontShowTutorialAgain} onChange={e => setDontShowTutorialAgain(e.target.checked)} className="w-4 h-4 accent-purple-500 rounded-md" />
+                                        <label htmlFor="hideTutorial" className={`text-xs ${colors.textLight} font-bold`}>Não mostrar novamente neste login</label>
+                                    </div>
+                                )}
 
-                                <Button onClick={handleCloseTutorial} variant="primary" colors={colors} className="w-full mt-2">Entendido</Button>
+                                <Button onClick={handleCloseTutorial} variant="primary" colors={colors} className={`w-full ${tutorialMode === 'manual' ? 'mt-4' : 'mt-2'}`}>Entendido</Button>
                             </div>
                         </div>
                     )}
@@ -1041,22 +923,13 @@
                     {pastProductPrompt && (
                         <div className="absolute inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 transition-opacity">
                             <div className={`${colors.card} w-full max-w-[320px] rounded-[2rem] p-6 shadow-2xl animate-in border ${colors.border} flex flex-col text-center`}>
-                                <div className={`w-16 h-16 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4`}>
-                                    <i className={`ph-fill ph-calendar-plus text-blue-500 text-3xl`}></i>
-                                </div>
+                                <div className={`w-16 h-16 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4`}><i className={`ph-fill ph-calendar-plus text-blue-500 text-3xl`}></i></div>
                                 <h2 className={`text-xl font-bold ${colors.text} font-serif mb-2`}>Produto no Passado</h2>
                                 <p className={`text-sm ${colors.textLight} mb-6`}>Está a adicionar <b>{pastProductPrompt.name}</b> numa data passada. Como deseja aplicar nos dias seguintes até hoje?</p>
-                                
                                 <div className="flex flex-col gap-2">
-                                    <button onClick={() => handlePastProductDecision('CHECK_ALL')} className={`p-3 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-sm transition-colors`}>
-                                        Adicionar e marcar como usado até hoje
-                                    </button>
-                                    <button onClick={() => handlePastProductDecision('ADD_ONLY')} className={`p-3 rounded-xl ${colors.surfaceAlt} ${colors.textStrong} font-bold text-sm hover:brightness-95 transition-colors`}>
-                                        Apenas mostrar na lista
-                                    </button>
-                                    <button onClick={() => handlePastProductDecision('SINGLE_USE')} className={`p-3 rounded-xl border border-red-200 text-red-500 bg-red-50 dark:bg-red-900/10 font-bold text-sm hover:bg-red-100 transition-colors`}>
-                                        Foi uso único (apenas neste dia)
-                                    </button>
+                                    <button onClick={() => handlePastProductDecision('CHECK_ALL')} className={`p-3 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-sm transition-colors`}>Adicionar e marcar como usado até hoje</button>
+                                    <button onClick={() => handlePastProductDecision('ADD_ONLY')} className={`p-3 rounded-xl ${colors.surfaceAlt} ${colors.textStrong} font-bold text-sm hover:brightness-95 transition-colors`}>Apenas mostrar na lista</button>
+                                    <button onClick={() => handlePastProductDecision('SINGLE_USE')} className={`p-3 rounded-xl border border-red-200 text-red-500 bg-red-50 dark:bg-red-900/10 font-bold text-sm hover:bg-red-100 transition-colors`}>Foi uso único (apenas neste dia)</button>
                                 </div>
                             </div>
                         </div>
@@ -1067,30 +940,21 @@
                         <div className="absolute inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm transition-opacity perspective-container" onClick={closeModal}>
                             <div className={`w-full max-w-[320px] ${colors.card} rounded-[2.5rem] p-8 shadow-2xl border ${colors.border} ${isClosingModal ? 'flip-card-exit' : 'flip-card-enter'} flex flex-col items-center text-center`} onClick={e => e.stopPropagation()}>
                                 <button onClick={closeModal} className={`absolute top-5 right-5 ${colors.textLight} hover:${colors.textStrong} p-1`}><i className="ph-bold ph-x text-xl"></i></button>
-                                <div className={`p-5 rounded-full ${activeStatModal.bgColor} mb-4`}>
-                                    <i className={`ph-fill ${activeStatModal.icon} ${activeStatModal.iconColor} text-5xl`}></i>
-                                </div>
+                                <div className={`p-5 rounded-full ${activeStatModal.bgColor} mb-4`}><i className={`ph-fill ${activeStatModal.icon} ${activeStatModal.iconColor} text-5xl`}></i></div>
                                 <h2 className={`text-2xl font-bold ${colors.text} font-serif mb-1`}>{activeStatModal.title}</h2>
                                 <p className={`text-4xl font-black ${activeStatModal.valColor} mb-6`}>{activeStatModal.value}</p>
-                                <div className={`${colors.surface} p-4 rounded-3xl border ${colors.border} w-full shadow-inner`}>
-                                    <p className={`text-sm font-medium ${colors.textStrong} leading-relaxed`}>{activeStatModal.insight}</p>
-                                </div>
+                                <div className={`${colors.surface} p-4 rounded-3xl border ${colors.border} w-full shadow-inner`}><p className={`text-sm font-medium ${colors.textStrong} leading-relaxed`}>{activeStatModal.insight}</p></div>
                             </div>
                         </div>
                     )}
 
                     <div className="absolute top-4 w-full px-4 z-50 flex flex-col gap-2 pointer-events-none max-w-md mx-auto left-1/2 -translate-x-1/2">
-                        {notifications.map(n => (
-                            <div key={n.id} className={`${n.isError ? 'bg-red-500/90 border-red-600' : colors.notification} p-4 rounded-2xl flex items-center shadow-lg pointer-events-auto border animate-in`}><i className={`ph-fill ${n.isError ? 'ph-warning-circle text-white' : 'ph-check-circle text-green-500'} mr-2 text-xl`}></i><p className={`font-bold ${n.isError ? 'text-white' : colors.textStrong} text-sm`}>{n.msg}</p></div>
-                        ))}
+                        {notifications.map(n => (<div key={n.id} className={`${n.isError ? 'bg-red-500/90 border-red-600' : colors.notification} p-4 rounded-2xl flex items-center shadow-lg pointer-events-auto border animate-in`}><i className={`ph-fill ${n.isError ? 'ph-warning-circle text-white' : 'ph-check-circle text-green-500'} mr-2 text-xl`}></i><p className={`font-bold ${n.isError ? 'text-white' : colors.textStrong} text-sm`}>{n.msg}</p></div>))}
                     </div>
 
                     <div className={`max-w-md mx-auto h-full relative ${colors.bg} flex flex-col overflow-hidden`}>
                         <div className="flex-1 w-full relative overflow-hidden">
-                            <div 
-                                className="w-[300%] h-full flex flex-nowrap transition-transform duration-[400ms] ease-[cubic-bezier(0.32,0.72,0,1)]"
-                                style={{ transform: `translateX(-${activeIndex * (100 / 3)}%)` }}
-                            >
+                            <div className="w-[300%] h-full flex flex-nowrap transition-transform duration-[400ms] ease-[cubic-bezier(0.32,0.72,0,1)]" style={{ transform: `translateX(-${activeIndex * (100 / 3)}%)` }}>
                                 
                                 {/* --- ABA: HOJE (DIÁRIO CAPILAR) --- */}
                                 <div className="w-1/3 h-full overflow-y-auto smooth-scroll p-6 scrollbar-hide pb-40">
@@ -1102,14 +966,10 @@
                                                     <p className={`text-xs ${colors.textLight} uppercase tracking-widest font-bold`}>{formatDateVisual(activeDateStr)}</p>
                                                     <div className="mt-1 flex items-center">
                                                         <h1 className={`text-3xl font-bold ${colors.text} font-serif flex items-center gap-2 tracking-tight`}>
-                                                            {activeDateStr === realTodayStr ? (
-                                                                <>Olá, {userName}!</>
-                                                            ) : 'Registo Antigo'}
+                                                            {activeDateStr === realTodayStr ? <>Olá, {userName}!</> : 'Registo Antigo'}
                                                         </h1>
                                                     </div>
-                                                    {activeDateStr !== realTodayStr && (
-                                                        <button onClick={() => setActiveDateStr(realTodayStr)} className={`text-xs ${colors.primaryText} font-bold mt-2 flex items-center gap-1 bg-[#D2E0D9] bg-opacity-30 px-3 py-1.5 rounded-full inline-flex`}><i className="ph-bold ph-arrow-left"></i> Voltar para Hoje</button>
-                                                    )}
+                                                    {activeDateStr !== realTodayStr && (<button onClick={() => setActiveDateStr(realTodayStr)} className={`text-xs ${colors.primaryText} font-bold mt-2 flex items-center gap-1 bg-[#D2E0D9] bg-opacity-30 px-3 py-1.5 rounded-full inline-flex`}><i className="ph-bold ph-arrow-left"></i> Voltar para Hoje</button>)}
                                                 </>
                                             }
                                         />
@@ -1117,49 +977,18 @@
                                         <div className="space-y-6">
                                             {/* CARD 1: ESTADO DO CABELO */}
                                             <Card style={{animationDelay: '120ms'}} colors={colors} className="cascade-item relative z-0">
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <div className="flex items-center gap-2"><i className={`ph-fill ph-sparkle ${colors.accentText} text-xl`}></i><h3 className={`font-semibold ${colors.text}`}>Como sente os fios hoje?</h3></div>
-                                                    <button onClick={() => setShowTutorial(true)} className={`p-1.5 rounded-full ${colors.surfaceAlt} text-sm ${colors.textMuted} hover:${colors.textStrong}`}><i className="ph-bold ph-question"></i></button>
-                                                </div>
-                                                
+                                                <div className="flex items-center justify-between mb-4"><div className="flex items-center gap-2"><i className={`ph-fill ph-sparkle ${colors.accentText} text-xl`}></i><h3 className={`font-semibold ${colors.text}`}>Como sente os fios hoje?</h3></div></div>
                                                 <div className="relative">
-                                                    {statusFeedback && (
-                                                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-[100] px-4 py-1.5 bg-[#282624] text-[#D6D0C4] dark:bg-stone-200 dark:text-stone-800 text-xs font-bold rounded-full shadow-lg toast-enter pointer-events-none whitespace-nowrap">
-                                                            {statusFeedback}
-                                                        </div>
-                                                    )}
-                                                    <div className={`flex flex-wrap justify-center gap-x-4 gap-y-3 ${colors.surface} p-4 rounded-2xl mb-4`}>
-                                                        {HAIR_STATUS.map(s => (
-                                                            <button type="button" key={s.id} onClick={() => handleStatusSelect(s)} className={`hover:scale-125 transition-transform ${s.color}`}>
-                                                                <i className={`ph-fill ${s.icon} text-3xl`}></i>
-                                                            </button>
-                                                        ))}
-                                                    </div>
+                                                    {statusFeedback && (<div className="absolute -top-12 left-1/2 -translate-x-1/2 z-[100] px-4 py-1.5 bg-[#282624] text-[#D6D0C4] dark:bg-stone-200 dark:text-stone-800 text-xs font-bold rounded-full shadow-lg toast-enter pointer-events-none whitespace-nowrap">{statusFeedback}</div>)}
+                                                    <div className={`flex flex-wrap justify-center gap-x-4 gap-y-3 ${colors.surface} p-4 rounded-2xl mb-4`}>{HAIR_STATUS.map(s => (<button type="button" key={s.id} onClick={() => handleStatusSelect(s)} className={`hover:scale-125 transition-transform ${s.color}`}><i className={`ph-fill ${s.icon} text-3xl`}></i></button>))}</div>
                                                 </div>
-
-                                                {dayLog.status.length > 0 && (
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {dayLog.status.map((s, i) => {
-                                                            const statusData = HAIR_STATUS.find(x => x.id === s.status);
-                                                            return (
-                                                                <div key={i} className={`flex items-center gap-1 ${colors.surfaceAlt} px-3 py-1.5 rounded-full text-sm`}><i className={`ph-fill ${statusData.icon} ${statusData.color}`}></i><span className={`font-medium ${colors.textLight}`}>{s.time}</span><button onClick={() => updateActiveLog('status', dayLog.status.filter((_, idx) => idx !== i))} className="ml-1 text-red-400"><i className="ph-bold ph-x text-xs"></i></button></div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
+                                                {dayLog.status.length > 0 && (<div className="flex flex-wrap gap-2">{dayLog.status.map((s, i) => { const statusData = HAIR_STATUS.find(x => x.id === s.status); return (<div key={i} className={`flex items-center gap-1 ${colors.surfaceAlt} px-3 py-1.5 rounded-full text-sm`}><i className={`ph-fill ${statusData.icon} ${statusData.color}`}></i><span className={`font-medium ${colors.textLight}`}>{s.time}</span><button onClick={() => updateActiveLog('status', dayLog.status.filter((_, idx) => idx !== i))} className="ml-1 text-red-400"><i className="ph-bold ph-x text-xs"></i></button></div>); })}</div>)}
                                             </Card>
 
                                             {/* NOVO CHECK: LAVAGEM DO CABELO */}
                                             <Card style={{animationDelay: '240ms'}} colors={colors} className={`cascade-item py-4 flex justify-between items-center cursor-pointer transition-colors ${dayLog.washed ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/50' : ''}`} onClick={() => updateActiveLog('washed', !dayLog.washed)}>
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`p-2 rounded-full transition-colors ${dayLog.washed ? 'bg-blue-500 text-white shadow-md' : colors.surfaceAlt + ' ' + colors.textLight}`}>
-                                                        <i className="ph-fill ph-drop text-xl"></i>
-                                                    </div>
-                                                    <span className={`font-bold transition-colors ${dayLog.washed ? 'text-blue-600 dark:text-blue-400' : colors.text}`}>Lavou a cabeça neste dia?</span>
-                                                </div>
-                                                <div className={`w-6 h-6 rounded-md flex items-center justify-center border-2 transition-colors ${dayLog.washed ? 'bg-blue-500 border-blue-500 text-white shadow-sm' : colors.border + ' bg-transparent'}`}>
-                                                    {dayLog.washed && <i className="ph-bold ph-check"></i>}
-                                                </div>
+                                                <div className="flex items-center gap-3"><div className={`p-2 rounded-full transition-colors ${dayLog.washed ? 'bg-blue-500 text-white shadow-md' : colors.surfaceAlt + ' ' + colors.textLight}`}><i className="ph-fill ph-drop text-xl"></i></div><span className={`font-bold transition-colors ${dayLog.washed ? 'text-blue-600 dark:text-blue-400' : colors.text}`}>Lavou a cabeça neste dia?</span></div>
+                                                <div className={`w-6 h-6 rounded-md flex items-center justify-center border-2 transition-colors ${dayLog.washed ? 'bg-blue-500 border-blue-500 text-white shadow-sm' : colors.border + ' bg-transparent'}`}>{dayLog.washed && <i className="ph-bold ph-check"></i>}</div>
                                             </Card>
 
                                             {/* CARD 2: PRODUTOS DIÁRIOS */}
@@ -1167,10 +996,7 @@
                                                 <div className="flex items-center justify-between mb-4"><div className="flex items-center gap-2"><i className={`ph-fill ph-flask ${colors.blueText} text-xl`}></i><h3 className={`font-semibold ${colors.text}`}>Uso Diário</h3></div><button onClick={() => setIsAddingProduct(!isAddingProduct)} className={`p-1.5 rounded-full ${colors.blue} ${colors.blueText}`}><i className={`ph-bold ${isAddingProduct ? 'ph-x' : 'ph-plus'} text-lg`}></i></button></div>
                                                 {isAddingProduct && (
                                                     <div className={`${colors.blueCard} p-4 rounded-2xl mb-4 space-y-3 border`}>
-                                                        <div className="flex gap-2">
-                                                            <input placeholder="Tónico, Óleo..." value={newProductInput.name} onChange={e => setNewProductInput({...newProductInput, name: e.target.value})} className={`flex-1 min-w-0 px-4 py-2 rounded-xl text-sm ${colors.input}`} />
-                                                            <input type="time" value={newProductInput.time} onChange={e => setNewProductInput({...newProductInput, time: e.target.value})} className={`w-24 shrink-0 px-2 py-2 text-center rounded-xl text-sm ${colors.input}`} />
-                                                        </div>
+                                                        <div className="flex gap-2"><input placeholder="Tónico, Óleo..." value={newProductInput.name} onChange={e => setNewProductInput({...newProductInput, name: e.target.value})} className={`flex-1 min-w-0 px-4 py-2 rounded-xl text-sm ${colors.input}`} /><input type="time" value={newProductInput.time} onChange={e => setNewProductInput({...newProductInput, time: e.target.value})} className={`w-24 shrink-0 px-2 py-2 text-center rounded-xl text-sm ${colors.input}`} /></div>
                                                         <Button type="button" colors={colors} variant="blue" onClick={handleAddProduct} className="w-full py-2">Guardar Produto</Button>
                                                     </div>
                                                 )}
@@ -1195,45 +1021,17 @@
                                             <Card style={{animationDelay: '480ms'}} colors={colors} className="cascade-item">
                                                 <div className="flex items-center gap-2 mb-4"><i className="ph-fill ph-magic-wand text-emerald-500 text-xl"></i><h3 className={`font-semibold ${colors.text}`}>Cronograma Capilar</h3></div>
                                                 <div className="space-y-4">
-                                                    <div>
-                                                        <label className={`text-sm ${colors.textLight} mb-2 block`}>Tempo de Máscara: <span className={`font-bold ${colors.emeraldText}`}>{dayLog.treatment?.minutes || 0} min</span></label>
-                                                        <input type="range" min="0" max="60" step="5" value={dayLog.treatment?.minutes || 0} onChange={(e) => updateActiveLog('treatment', { minutes: parseInt(e.target.value), type: dayLog.treatment?.type })} className="w-full accent-emerald-500" />
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {TREATMENT_TYPES.map(q => (
-                                                            <button 
-                                                                type="button" 
-                                                                key={q.id} 
-                                                                onClick={() => updateActiveLog('treatment', { minutes: dayLog.treatment?.minutes || 0, type: dayLog.treatment?.type === q.id ? '' : q.id })} 
-                                                                className={`w-full py-2.5 rounded-xl text-xs font-bold border transition-all ${dayLog.treatment?.type === q.id ? 'bg-emerald-500/20 text-emerald-600 border-emerald-200' : `${colors.surface} ${colors.text} border-transparent`}`}
-                                                            >
-                                                                {q.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
+                                                    <div><label className={`text-sm ${colors.textLight} mb-2 block`}>Tempo de Máscara: <span className={`font-bold ${colors.emeraldText}`}>{dayLog.treatment?.minutes || 0} min</span></label><input type="range" min="0" max="60" step="5" value={dayLog.treatment?.minutes || 0} onChange={(e) => updateActiveLog('treatment', { minutes: parseInt(e.target.value), type: dayLog.treatment?.type })} className="w-full accent-emerald-500" /></div>
+                                                    <div className="grid grid-cols-2 gap-2">{TREATMENT_TYPES.map(q => (<button type="button" key={q.id} onClick={() => updateActiveLog('treatment', { minutes: dayLog.treatment?.minutes || 0, type: dayLog.treatment?.type === q.id ? '' : q.id })} className={`w-full py-2.5 rounded-xl text-xs font-bold border transition-all ${dayLog.treatment?.type === q.id ? 'bg-emerald-500/20 text-emerald-600 border-emerald-200' : `${colors.surface} ${colors.text} border-transparent`}`}>{q.label}</button>))}</div>
                                                 </div>
                                             </Card>
 
                                             {/* CARD 4: FONTES DE CALOR */}
                                             <Card style={{animationDelay: '600ms'}} colors={colors} className={`cascade-item flex flex-col gap-4 ${colors.orange} bg-opacity-20 border-orange-200`}>
                                                 <div className="flex items-center gap-2"><i className="ph-fill ph-fire text-orange-500 text-xl"></i><h3 className={`font-semibold ${colors.textStrong}`}>Uso de Calor</h3></div>
-                                                
                                                 <div className="flex flex-col gap-2">
-                                                    <button type="button" onClick={() => updateActiveLog('heat', { ...dayLog.heat, active: !dayLog.heat.active })} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all ${dayLog.heat.active ? 'border-orange-400 bg-orange-100/50 dark:bg-orange-900/30' : 'border-transparent ' + colors.surface}`}>
-                                                        <span className={`text-sm font-bold ${dayLog.heat.active ? colors.orangeText : colors.text}`}>Usei Secador / Chapinha</span>
-                                                        <div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${dayLog.heat.active ? 'bg-orange-500 border-orange-500 text-white shadow-sm' : colors.border + ' bg-transparent'}`}>
-                                                            {dayLog.heat.active && <i className="ph-bold ph-check"></i>}
-                                                        </div>
-                                                    </button>
-
-                                                    {dayLog.heat.active && (
-                                                        <button type="button" onClick={() => updateActiveLog('heat', { ...dayLog.heat, protectant: !dayLog.heat.protectant })} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all animate-in ${dayLog.heat.protectant ? 'border-green-400 bg-green-100/50 dark:bg-green-900/30' : 'border-red-200 bg-red-50/50 dark:bg-red-900/20'}`}>
-                                                            <span className={`text-sm font-bold ${dayLog.heat.protectant ? 'text-green-600' : 'text-red-400'}`}>Apliquei Protetor Térmico</span>
-                                                            <div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${dayLog.heat.protectant ? 'bg-green-500 border-green-500 text-white shadow-sm' : 'border-red-300 bg-transparent'}`}>
-                                                                {dayLog.heat.protectant && <i className="ph-bold ph-check"></i>}
-                                                            </div>
-                                                        </button>
-                                                    )}
+                                                    <button type="button" onClick={() => updateActiveLog('heat', { ...dayLog.heat, active: !dayLog.heat.active })} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all ${dayLog.heat.active ? 'border-orange-400 bg-orange-100/50 dark:bg-orange-900/30' : 'border-transparent ' + colors.surface}`}><span className={`text-sm font-bold ${dayLog.heat.active ? colors.orangeText : colors.text}`}>Usei Secador / Chapinha</span><div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${dayLog.heat.active ? 'bg-orange-500 border-orange-500 text-white shadow-sm' : colors.border + ' bg-transparent'}`}>{dayLog.heat.active && <i className="ph-bold ph-check"></i>}</div></button>
+                                                    {dayLog.heat.active && (<button type="button" onClick={() => updateActiveLog('heat', { ...dayLog.heat, protectant: !dayLog.heat.protectant })} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all animate-in ${dayLog.heat.protectant ? 'border-green-400 bg-green-100/50 dark:bg-green-900/30' : 'border-red-200 bg-red-50/50 dark:bg-red-900/20'}`}><span className={`text-sm font-bold ${dayLog.heat.protectant ? 'text-green-600' : 'text-red-400'}`}>Apliquei Protetor Térmico</span><div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${dayLog.heat.protectant ? 'bg-green-500 border-green-500 text-white shadow-sm' : 'border-red-300 bg-transparent'}`}>{dayLog.heat.protectant && <i className="ph-bold ph-check"></i>}</div></button>)}
                                                 </div>
                                             </Card>
 
@@ -1245,56 +1043,19 @@
                                                         <div className="mb-3">
                                                             <p className={`text-xs ${colors.textMuted} uppercase font-bold mb-2`}>O que fez</p>
                                                             <div className="flex flex-col gap-2">
-                                                                {(Array.isArray(dayLog.salon.procedures) ? dayLog.salon.procedures : (dayLog.salon.procedures || '').split(', ').filter(Boolean)).map((p, idx) => (
-                                                                    <div key={idx} className={`p-2 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30`}>
-                                                                        <p className={`text-xs font-bold ${colors.purpleText}`}>{p}</p>
-                                                                        {SALON_INFO[p] && <p className={`text-[10px] ${colors.textStrong} opacity-80 mt-1`}>{SALON_INFO[p]}</p>}
-                                                                    </div>
-                                                                ))}
+                                                                {(Array.isArray(dayLog.salon.procedures) ? dayLog.salon.procedures : (dayLog.salon.procedures || '').split(', ').filter(Boolean)).map((p, idx) => (<div key={idx} className={`p-2 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30`}><p className={`text-xs font-bold ${colors.purpleText}`}>{p}</p>{SALON_INFO[p] && <p className={`text-[10px] ${colors.textStrong} opacity-80 mt-1`}>{SALON_INFO[p]}</p>}</div>))}
                                                             </div>
                                                         </div>
-                                                        <div className="flex justify-between items-center border-t border-purple-200/50 pt-3 mt-1">
-                                                            <span className={`${HAIR_STATUS.find(m => m.id === dayLog.salon.mood)?.color} flex items-center gap-1 text-sm font-bold`}><i className={`ph-fill ${HAIR_STATUS.find(m => m.id === dayLog.salon.mood)?.icon} text-xl`}></i> Resultado</span>
-                                                            <div className="flex gap-3">
-                                                                <button onClick={handleEditSalon} className="text-blue-500 text-sm flex items-center gap-1"><i className="ph-bold ph-pencil-simple"></i></button>
-                                                                <button onClick={() => updateActiveLog('salon', null)} className="text-red-400 text-sm flex items-center gap-1"><i className="ph-bold ph-trash"></i></button>
-                                                            </div>
-                                                        </div>
+                                                        <div className="flex justify-between items-center border-t border-purple-200/50 pt-3 mt-1"><span className={`${HAIR_STATUS.find(m => m.id === dayLog.salon.mood)?.color} flex items-center gap-1 text-sm font-bold`}><i className={`ph-fill ${HAIR_STATUS.find(m => m.id === dayLog.salon.mood)?.icon} text-xl`}></i> Resultado</span><div className="flex gap-3"><button onClick={handleEditSalon} className="text-blue-500 text-sm flex items-center gap-1"><i className="ph-bold ph-pencil-simple"></i></button><button onClick={() => updateActiveLog('salon', null)} className="text-red-400 text-sm flex items-center gap-1"><i className="ph-bold ph-trash"></i></button></div></div>
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-4">
                                                         <div>
                                                             <p className={`text-xs ${colors.textMuted} mb-3 block font-bold text-center`}>Toque nos botões do que fez hoje no salão:</p>
-                                                            <div className="flex flex-wrap gap-2 justify-center mb-4">
-                                                                {Object.keys(SALON_INFO).map(p => {
-                                                                    const isSelected = salonInput.procedures.includes(p);
-                                                                    return (
-                                                                        <button type="button" key={p} onClick={() => toggleSalonProcedure(p)} className={`text-[11px] font-bold px-3 py-2 rounded-xl shadow-sm border transition-all ${isSelected ? 'bg-purple-500 text-white border-purple-500 scale-105' : `${colors.surface} ${colors.textStrong} border-stone-200 dark:border-stone-700 hover:bg-purple-50 dark:hover:bg-purple-900/20`}`}>
-                                                                            {isSelected ? '✓ ' : '+ '}{p}
-                                                                        </button>
-                                                                    )
-                                                                })}
-                                                            </div>
-
-                                                            {salonInput.procedures.length > 0 && (
-                                                                <div className="flex flex-col gap-2 mb-4 animate-in">
-                                                                    <p className={`text-[10px] uppercase font-bold ${colors.purpleText} ml-1`}>Dicas sobre as suas escolhas:</p>
-                                                                    {salonInput.procedures.map((p, idx) => (
-                                                                        <div key={idx} className={`p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-white/60 dark:bg-black/20 flex gap-2 items-start`}>
-                                                                            <i className={`ph-fill ph-info text-purple-400 mt-0.5`}></i>
-                                                                            <div>
-                                                                                <span className={`text-[11px] font-bold ${colors.textStrong} block leading-none mb-1`}>{p}</span>
-                                                                                <span className={`text-[10px] ${colors.textMuted}`}>{SALON_INFO[p]}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
+                                                            <div className="flex flex-wrap gap-2 justify-center mb-4">{Object.keys(SALON_INFO).map(p => { const isSelected = salonInput.procedures.includes(p); return (<button type="button" key={p} onClick={() => toggleSalonProcedure(p)} className={`text-[11px] font-bold px-3 py-2 rounded-xl shadow-sm border transition-all ${isSelected ? 'bg-purple-500 text-white border-purple-500 scale-105' : `${colors.surface} ${colors.textStrong} border-stone-200 dark:border-stone-700 hover:bg-purple-50 dark:hover:bg-purple-900/20`}`}>{isSelected ? '✓ ' : '+ '}{p}</button>) })}</div>
+                                                            {salonInput.procedures.length > 0 && (<div className="flex flex-col gap-2 mb-4 animate-in"><p className={`text-[10px] uppercase font-bold ${colors.purpleText} ml-1`}>Dicas sobre as suas escolhas:</p>{salonInput.procedures.map((p, idx) => (<div key={idx} className={`p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-white/60 dark:bg-black/20 flex gap-2 items-start`}><i className={`ph-fill ph-info text-purple-400 mt-0.5`}></i><div><span className={`text-[11px] font-bold ${colors.textStrong} block leading-none mb-1`}>{p}</span><span className={`text-[10px] ${colors.textMuted}`}>{SALON_INFO[p]}</span></div></div>))}</div>)}
                                                         </div>
-                                                        <div>
-                                                            <label className={`text-xs ${colors.textMuted} mb-2 block text-center font-bold`}>Como se sentiu com o resultado final?</label>
-                                                            <div className={`flex justify-between items-center ${colors.card} p-2 rounded-xl overflow-x-auto gap-2`}>{HAIR_STATUS.map(m => (<button type="button" key={m.id} onClick={() => setSalonInput({...salonInput, mood: m.id})} className={`p-1.5 shrink-0 rounded-full transition-all ${salonInput.mood === m.id ? `${colors.surface} shadow-sm ${m.color} scale-110` : 'opacity-40 grayscale hover:grayscale-0'}`}><i className={`ph-fill ${m.icon} text-3xl`}></i></button>))}</div>
-                                                        </div>
+                                                        <div><label className={`text-xs ${colors.textMuted} mb-2 block text-center font-bold`}>Como se sentiu com o resultado final?</label><div className={`flex justify-between items-center ${colors.card} p-2 rounded-xl overflow-x-auto gap-2`}>{HAIR_STATUS.map(m => (<button type="button" key={m.id} onClick={() => setSalonInput({...salonInput, mood: m.id})} className={`p-1.5 shrink-0 rounded-full transition-all ${salonInput.mood === m.id ? `${colors.surface} shadow-sm ${m.color} scale-110` : 'opacity-40 grayscale hover:grayscale-0'}`}><i className={`ph-fill ${m.icon} text-3xl`}></i></button>))}</div></div>
                                                         <Button type="button" colors={colors} variant="purple" onClick={() => { if (salonInput.procedures.length > 0) { updateActiveLog('salon', salonInput); setSalonInput({ procedures: [], mood: 'perfeito' }); } else { addNotification("Adicione pelo menos um procedimento!"); } }} className="w-full py-3 shadow-sm">Guardar Ida ao Salão</Button>
                                                     </div>
                                                 )}
@@ -1335,12 +1096,7 @@
                                                         return (
                                                             <button key={day} onClick={() => setSelectedHistoryDate(dateStr)} className={`w-8 h-8 mx-auto flex flex-col items-center justify-center rounded-xl font-bold text-sm transition-all relative ${isSel ? `${colors.primary} ${colors.primaryText} shadow-md` : `${colors.text} hover:${colors.surfaceHover}`}`}>
                                                                 {day}
-                                                                {hasData && (
-                                                                    <div className="flex gap-0.5 mt-0.5">
-                                                                        <span className={`w-1 h-1 rounded-full ${isSel ? 'bg-[#4A6B5D]' : 'bg-stone-300'}`}></span>
-                                                                        {dayData.washed && <span className={`w-1 h-1 rounded-full ${isSel ? 'bg-blue-600' : 'bg-blue-400'}`}></span>}
-                                                                    </div>
-                                                                )}
+                                                                {hasData && (<div className="flex gap-0.5 mt-0.5"><span className={`w-1 h-1 rounded-full ${isSel ? 'bg-[#4A6B5D]' : 'bg-stone-300'}`}></span>{dayData.washed && <span className={`w-1 h-1 rounded-full ${isSel ? 'bg-blue-600' : 'bg-blue-400'}`}></span>}</div>)}
                                                             </button>
                                                         )
                                                     })}
@@ -1348,34 +1104,23 @@
                                             </Card>
 
                                             <div className="cascade-item mt-8 mb-8" style={{animationDelay: '240ms'}}>
-                                                <h3 className={`text-lg font-bold ${colors.text} mb-4 flex justify-between items-center`}>
-                                                    <span><i className="ph-fill ph-calendar"></i> {formatDateVisual(selectedHistoryDate)}</span>
-                                                </h3>
+                                                <h3 className={`text-lg font-bold ${colors.text} mb-4 flex justify-between items-center`}><span><i className="ph-fill ph-calendar"></i> {formatDateVisual(selectedHistoryDate)}</span></h3>
                                                 
                                                 {logs[selectedHistoryDate] && (logs[selectedHistoryDate].washed || logs[selectedHistoryDate].status?.length>0 || logs[selectedHistoryDate].treatment?.minutes>0 || logs[selectedHistoryDate].salon || logs[selectedHistoryDate].heat?.active || logs[selectedHistoryDate].extras?.length>0 || Object.keys(logs[selectedHistoryDate].routine||{}).length>0) ? (
                                                     <div className="space-y-4">
                                                         <div className="grid grid-cols-2 gap-3">
                                                             {logs[selectedHistoryDate].status?.length > 0 && (
-                                                                <Card colors={colors} className={`col-span-2 p-4 ${colors.surface} cascade-item`} style={{animationDelay: '360ms'}}>
-                                                                    <div className="flex gap-2 flex-wrap">{logs[selectedHistoryDate].status.map((m, i) => <div key={i} className={`flex items-center gap-1 ${colors.card} px-3 py-1 rounded-full text-xs shadow-sm border ${colors.border}`}><i className={`ph-fill ${HAIR_STATUS.find(x=>x.id===m.status)?.icon} ${HAIR_STATUS.find(x=>x.id===m.status)?.color}`}></i> <span className={`font-medium ${colors.textStrong}`}>{m.time}</span></div>)}</div>
-                                                                </Card>
+                                                                <Card colors={colors} className={`col-span-2 p-4 ${colors.surface} cascade-item`} style={{animationDelay: '360ms'}}><div className="flex gap-2 flex-wrap">{logs[selectedHistoryDate].status.map((m, i) => <div key={i} className={`flex items-center gap-1 ${colors.card} px-3 py-1 rounded-full text-xs shadow-sm border ${colors.border}`}><i className={`ph-fill ${HAIR_STATUS.find(x=>x.id===m.status)?.icon} ${HAIR_STATUS.find(x=>x.id===m.status)?.color}`}></i> <span className={`font-medium ${colors.textStrong}`}>{m.time}</span></div>)}</div></Card>
                                                             )}
                                                             {logs[selectedHistoryDate].washed && (
-                                                                <Card colors={colors} className={`col-span-2 p-3 bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/50 flex items-center gap-2 cascade-item`} style={{animationDelay: '480ms'}}>
-                                                                    <i className="ph-fill ph-drop text-blue-500 text-lg"></i>
-                                                                    <span className="text-sm font-bold text-blue-600 dark:text-blue-400">Lavou a cabeça neste dia</span>
-                                                                </Card>
+                                                                <Card colors={colors} className={`col-span-2 p-3 bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/50 flex items-center gap-2 cascade-item`} style={{animationDelay: '480ms'}}><i className="ph-fill ph-drop text-blue-500 text-lg"></i><span className="text-sm font-bold text-blue-600 dark:text-blue-400">Lavou a cabeça neste dia</span></Card>
                                                             )}
                                                             {logs[selectedHistoryDate].salon && (
                                                                 <Card colors={colors} className={`col-span-2 p-4 ${colors.purpleCard} cascade-item`} style={{animationDelay: '600ms'}}>
                                                                     <div className="flex justify-between items-center">
                                                                         <div>
                                                                             <p className={`text-xs ${colors.purpleText} font-bold mb-1.5`}><i className="ph-fill ph-scissors"></i> Salão</p>
-                                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                                {(Array.isArray(logs[selectedHistoryDate].salon.procedures) ? logs[selectedHistoryDate].salon.procedures : (logs[selectedHistoryDate].salon.procedures || '').split(', ')).map((p, idx) => (
-                                                                                    <span key={idx} className={`text-[10px] font-bold px-2.5 py-1 rounded-md border border-purple-200 dark:border-purple-800 bg-white/50 dark:bg-black/20 ${colors.purpleText}`}>{p}</span>
-                                                                                ))}
-                                                                            </div>
+                                                                            <div className="flex flex-wrap gap-1 mt-1">{(Array.isArray(logs[selectedHistoryDate].salon.procedures) ? logs[selectedHistoryDate].salon.procedures : (logs[selectedHistoryDate].salon.procedures || '').split(', ')).map((p, idx) => (<span key={idx} className={`text-[10px] font-bold px-2.5 py-1 rounded-md border border-purple-200 dark:border-purple-800 bg-white/50 dark:bg-black/20 ${colors.purpleText}`}>{p}</span>))}</div>
                                                                         </div>
                                                                         <i className={`ph-fill ${HAIR_STATUS.find(m => m.id === logs[selectedHistoryDate].salon.mood)?.icon} ${HAIR_STATUS.find(m => m.id === logs[selectedHistoryDate].salon.mood)?.color} text-4xl shrink-0 ml-2`}></i>
                                                                     </div>
@@ -1384,48 +1129,24 @@
                                                             {(() => {
                                                                 const activeProdsHistory = products.filter(p => (!p.createdAt || p.createdAt <= selectedHistoryDate) && (!p.archivedAt || p.archivedAt > selectedHistoryDate) && !(p.hiddenDates && p.hiddenDates.includes(selectedHistoryDate)));
                                                                 if (activeProdsHistory.length > 0) {
-                                                                    return (
-                                                                        <Card colors={colors} className={`col-span-2 p-4 ${colors.blueCard} cascade-item`} style={{animationDelay: '720ms'}}>
-                                                                            <p className={`text-xs ${colors.blueTextAlt} font-bold`}><i className="ph-fill ph-drop"></i> Rotina Diária</p>
-                                                                            <div className="mt-2 space-y-1">{activeProdsHistory.map(prod => { const taken = logs[selectedHistoryDate].routine?.[prod.id]; return <p key={prod.id} className={`text-xs ${taken ? colors.textStrong + ' font-medium' : colors.textMuted + ' line-through'}`}>{taken ? '✅' : '❌'} {prod.name}</p> })}</div>
-                                                                        </Card>
-                                                                    )
+                                                                    return (<Card colors={colors} className={`col-span-2 p-4 ${colors.blueCard} cascade-item`} style={{animationDelay: '720ms'}}><p className={`text-xs ${colors.blueTextAlt} font-bold`}><i className="ph-fill ph-drop"></i> Rotina Diária</p><div className="mt-2 space-y-1">{activeProdsHistory.map(prod => { const taken = logs[selectedHistoryDate].routine?.[prod.id]; return <p key={prod.id} className={`text-xs ${taken ? colors.textStrong + ' font-medium' : colors.textMuted + ' line-through'}`}>{taken ? '✅' : '❌'} {prod.name}</p> })}</div></Card>)
                                                                 }
                                                                 return null;
                                                             })()}
                                                             {logs[selectedHistoryDate].treatment?.minutes > 0 && (
-                                                                <Card colors={colors} className={`p-4 ${colors.emerald} bg-opacity-20 cascade-item`} style={{animationDelay: '840ms'}}>
-                                                                    <p className={`text-xs ${colors.emeraldText} font-bold`}><i className="ph-fill ph-magic-wand"></i> Máscara</p>
-                                                                    <p className={`font-bold ${colors.emeraldText} text-lg mt-1`}>{logs[selectedHistoryDate].treatment.minutes}m</p>
-                                                                    <p className={`text-xs font-bold ${colors.emeraldText} opacity-70`}>{TREATMENT_TYPES.find(t=>t.id === logs[selectedHistoryDate].treatment.type)?.label}</p>
-                                                                </Card>
+                                                                <Card colors={colors} className={`p-4 ${colors.emerald} bg-opacity-20 cascade-item`} style={{animationDelay: '840ms'}}><p className={`text-xs ${colors.emeraldText} font-bold`}><i className="ph-fill ph-magic-wand"></i> Máscara</p><p className={`font-bold ${colors.emeraldText} text-lg mt-1`}>{logs[selectedHistoryDate].treatment.minutes}m</p><p className={`text-xs font-bold ${colors.emeraldText} opacity-70`}>{TREATMENT_TYPES.find(t=>t.id === logs[selectedHistoryDate].treatment.type)?.label}</p></Card>
                                                             )}
                                                             {(logs[selectedHistoryDate].heat?.active) && (
-                                                                <Card colors={colors} className={`p-4 flex flex-col justify-center ${colors.orange} bg-opacity-20 cascade-item`} style={{animationDelay: '960ms'}}>
-                                                                    <p className={`text-xs ${colors.orangeText} font-bold flex items-center gap-1`}><i className="ph-fill ph-fire text-sm"></i> Calor</p>
-                                                                    <p className={`font-bold ${colors.textStrong} text-sm mt-1`}>Secador/Chapinha</p>
-                                                                    <p className={`text-[10px] font-bold mt-1 ${logs[selectedHistoryDate].heat.protectant ? 'text-green-600' : 'text-red-500'}`}>
-                                                                        {logs[selectedHistoryDate].heat.protectant ? '✅ Com proteção' : '❌ Sem proteção'}
-                                                                    </p>
-                                                                </Card>
+                                                                <Card colors={colors} className={`p-4 flex flex-col justify-center ${colors.orange} bg-opacity-20 cascade-item`} style={{animationDelay: '960ms'}}><p className={`text-xs ${colors.orangeText} font-bold flex items-center gap-1`}><i className="ph-fill ph-fire text-sm"></i> Calor</p><p className={`font-bold ${colors.textStrong} text-sm mt-1`}>Secador/Chapinha</p><p className={`text-[10px] font-bold mt-1 ${logs[selectedHistoryDate].heat.protectant ? 'text-green-600' : 'text-red-500'}`}>{logs[selectedHistoryDate].heat.protectant ? '✅ Com proteção' : '❌ Sem proteção'}</p></Card>
                                                             )}
                                                             {logs[selectedHistoryDate].extras?.length > 0 && (
-                                                                <Card colors={colors} className={`col-span-1 p-4 ${colors.teal} bg-opacity-20 cascade-item`} style={{animationDelay: '1080ms'}}>
-                                                                    <p className={`text-xs ${colors.tealText} font-bold`}><i className="ph-fill ph-hand-heart"></i> Extras</p><div className="mt-2 space-y-1">{logs[selectedHistoryDate].extras.map((c,i) => <p key={i} className={`text-sm font-medium ${colors.textStrong}`}>{c.type} <span className={`text-xs font-normal ${colors.textMuted}`}>({c.duration}m)</span></p>)}</div>
-                                                                </Card>
+                                                                <Card colors={colors} className={`col-span-1 p-4 ${colors.teal} bg-opacity-20 cascade-item`} style={{animationDelay: '1080ms'}}><p className={`text-xs ${colors.tealText} font-bold`}><i className="ph-fill ph-hand-heart"></i> Extras</p><div className="mt-2 space-y-1">{logs[selectedHistoryDate].extras.map((c,i) => <p key={i} className={`text-sm font-medium ${colors.textStrong}`}>{c.type} <span className={`text-xs font-normal ${colors.textMuted}`}>({c.duration}m)</span></p>)}</div></Card>
                                                             )}
                                                         </div>
-                                                        <Button type="button" colors={colors} variant="outline" onClick={() => { handleNavMenuClick('home'); setActiveDateStr(selectedHistoryDate); }} className="w-full mt-4 text-sm border-2 cascade-item" style={{animationDelay: '1200ms'}}>
-                                                            <i className="ph-bold ph-pencil-simple"></i> Editar este dia
-                                                        </Button>
+                                                        <Button type="button" colors={colors} variant="outline" onClick={() => { handleNavMenuClick('home'); setActiveDateStr(selectedHistoryDate); }} className="w-full mt-4 text-sm border-2 cascade-item" style={{animationDelay: '1200ms'}}><i className="ph-bold ph-pencil-simple"></i> Editar este dia</Button>
                                                     </div>
                                                 ) : (
-                                                    <div className="text-center py-8 cascade-item" style={{animationDelay: '360ms'}}>
-                                                        <p className={`text-sm ${colors.textMuted} mb-4`}>Nenhum cuidado capilar registado.</p>
-                                                        <Button type="button" colors={colors} variant="primary" onClick={() => { handleNavMenuClick('home'); setActiveDateStr(selectedHistoryDate); }} className="mx-auto text-sm">
-                                                            <i className="ph-bold ph-plus"></i> Criar registo
-                                                        </Button>
-                                                    </div>
+                                                    <div className="text-center py-8 cascade-item" style={{animationDelay: '360ms'}}><p className={`text-sm ${colors.textMuted} mb-4`}>Nenhum cuidado capilar registado.</p><Button type="button" colors={colors} variant="primary" onClick={() => { handleNavMenuClick('home'); setActiveDateStr(selectedHistoryDate); }} className="mx-auto text-sm"><i className="ph-bold ph-plus"></i> Criar registo</Button></div>
                                                 )}
                                             </div>
                                         </div>
@@ -1445,10 +1166,7 @@
                                                 {STAT_PERIODS.map(period => (
                                                     <button 
                                                         key={period.val} 
-                                                        onClick={() => {
-                                                            if (period.val === 'custom') setIsCustomDateOpen(true);
-                                                            else setStatsPeriod(period.val);
-                                                        }} 
+                                                        onClick={() => { if (period.val === 'custom') setIsCustomDateOpen(true); else setStatsPeriod(period.val); }} 
                                                         className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-1.5 whitespace-nowrap ${statsPeriod === period.val ? `${colors.primary} ${colors.primaryText}` : `${colors.card} ${colors.textLight} border ${colors.border}`}`}
                                                     >
                                                         {period.icon && <i className={`ph-bold ${period.icon}`}></i>}
@@ -1476,64 +1194,40 @@
                                                 {/* LAVAGENS */}
                                                 <Card style={{animationDelay: '360ms'}} onClick={() => openModal('washed', 'Frequência de Lavagem', 'ph-drop', `bg-blue-100 dark:bg-blue-900/30`, 'text-blue-500', `${stats.totalWashes}x`, 'text-blue-500')} colors={colors} className={`cascade-item col-span-2 bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/50 flex justify-between items-center p-6 relative overflow-hidden group border-2 cursor-pointer hover:shadow-md transition-all`}>
                                                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    <div>
-                                                        <p className={`text-xs font-bold uppercase tracking-widest text-blue-400 dark:text-blue-300 mb-1`}>Cabelo Lavado</p>
-                                                        <p className={`text-2xl font-black text-blue-600 dark:text-blue-400`}><span className="text-3xl">{stats.totalWashes}</span> vezes</p>
-                                                        <p className={`text-xs font-bold mt-1 text-blue-500/70`}>em {stats.daysCount} dia(s)</p>
-                                                    </div>
+                                                    <div><p className={`text-xs font-bold uppercase tracking-widest text-blue-400 dark:text-blue-300 mb-1`}>Cabelo Lavado</p><p className={`text-2xl font-black text-blue-600 dark:text-blue-400`}><span className="text-3xl">{stats.totalWashes}</span> vezes</p><p className={`text-xs font-bold mt-1 text-blue-500/70`}>em {stats.daysCount} dia(s)</p></div>
                                                     <i className="ph-fill ph-drop text-blue-500/30 text-6xl"></i>
                                                 </Card>
 
                                                 {/* TRATAMENTO */}
                                                 <Card style={{animationDelay: '480ms'}} onClick={() => openModal('treatment', 'Tratamentos', 'ph-magic-wand', `${colors.emerald} bg-opacity-20`, colors.emeraldText, `${stats.treatUses}x`, colors.emeraldText)} colors={colors} className={`cascade-item col-span-1 flex flex-col items-center text-center gap-2 p-5 ${colors.emerald} bg-opacity-20 relative overflow-hidden group border-none cursor-pointer hover:shadow-md transition-all`}>
                                                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    <i className={`ph-fill ph-magic-wand ${colors.emeraldText} text-4xl mb-1`}></i>
-                                                    <p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight}`}>Máscara</p>
-                                                    <p className={`text-3xl font-black ${colors.emeraldText}`}>{stats.treatUses}x</p>
+                                                    <i className={`ph-fill ph-magic-wand ${colors.emeraldText} text-4xl mb-1`}></i><p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight}`}>Máscara</p><p className={`text-3xl font-black ${colors.emeraldText}`}>{stats.treatUses}x</p>
                                                 </Card>
 
                                                 {/* ROTINA */}
                                                 <Card style={{animationDelay: '600ms'}} onClick={() => openModal('routine', 'Adesão Rotina', 'ph-flask', `${colors.blueCard}`, colors.blueTextAlt, stats.routineAdherence !== null ? `${stats.routineAdherence}%` : 'N/A', colors.textStrong)} colors={colors} className={`cascade-item col-span-1 flex flex-col items-center text-center gap-2 p-5 ${colors.blueCard} relative overflow-hidden group border-none cursor-pointer hover:shadow-md transition-all`}>
                                                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    <i className={`ph-fill ph-flask ${colors.blueText} text-4xl mb-1`}></i>
-                                                    <p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight}`}>Produtos</p>
-                                                    <p className={`text-3xl font-black ${colors.blueTextAlt}`}>{stats.routineAdherence !== null ? `${stats.routineAdherence}%` : 'N/A'}</p>
+                                                    <i className={`ph-fill ph-flask ${colors.blueText} text-4xl mb-1`}></i><p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight}`}>Produtos</p><p className={`text-3xl font-black ${colors.blueTextAlt}`}>{stats.routineAdherence !== null ? `${stats.routineAdherence}%` : 'N/A'}</p>
                                                 </Card>
 
                                                 {/* SALÃO */}
                                                 <Card style={{animationDelay: '720ms'}} onClick={() => openModal('salon', 'Ida ao Salão', 'ph-scissors', `${colors.purpleCard}`, colors.purpleText, `${stats.totalSalon} vezes`, colors.purpleText)} colors={colors} className={`cascade-item col-span-2 ${colors.purpleCard} relative overflow-hidden group cursor-pointer hover:shadow-md transition-all`}>
                                                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <h3 className={`font-bold ${colors.textStrong} flex items-center gap-2`}><i className={`ph-fill ph-scissors ${colors.purpleText} text-2xl`}></i> Salão</h3>
-                                                        {stats.topSalonMood && <div className="text-right"><p className={`text-xs ${colors.textMuted} mb-1 font-bold`}>Resultado Geral</p><i className={`ph-fill ${stats.topSalonMood.icon} ${stats.topSalonMood.color} text-2xl`}></i></div>}
-                                                    </div>
-                                                    <div className={`${colors.translucentStrong} p-4 rounded-2xl flex justify-between items-center shadow-sm`}>
-                                                        <span className={`text-sm font-bold ${colors.textLight}`}>Mimos profissionais</span>
-                                                        <span className={`text-2xl font-black ${colors.purpleText}`}>{stats.totalSalon}</span>
-                                                    </div>
+                                                    <div className="flex justify-between items-start mb-4"><h3 className={`font-bold ${colors.textStrong} flex items-center gap-2`}><i className={`ph-fill ph-scissors ${colors.purpleText} text-2xl`}></i> Salão</h3>{stats.topSalonMood && <div className="text-right"><p className={`text-xs ${colors.textMuted} mb-1 font-bold`}>Resultado Geral</p><i className={`ph-fill ${stats.topSalonMood.icon} ${stats.topSalonMood.color} text-2xl`}></i></div>}</div>
+                                                    <div className={`${colors.translucentStrong} p-4 rounded-2xl flex justify-between items-center shadow-sm`}><span className={`text-sm font-bold ${colors.textLight}`}>Mimos profissionais</span><span className={`text-2xl font-black ${colors.purpleText}`}>{stats.totalSalon}</span></div>
                                                 </Card>
 
                                                 {/* CALOR */}
                                                 <Card style={{animationDelay: '840ms'}} onClick={() => openModal('heat', 'Uso de Calor', 'ph-fire', `${colors.orange} bg-opacity-20`, colors.orangeText, `${stats.heatDays} dias`, colors.orangeText)} colors={colors} className={`cascade-item col-span-2 flex justify-between items-center p-6 ${colors.orange} bg-opacity-20 relative overflow-hidden group border-none cursor-pointer hover:shadow-md transition-all`}>
                                                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    <div>
-                                                        <p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-1`}>Secador / Chapinha</p>
-                                                        <p className={`text-3xl font-black ${colors.orangeText}`}>{stats.heatDays} <span className="text-sm font-bold">dias</span></p>
-                                                        {stats.heatDays > 0 && <p className={`text-xs font-bold mt-1 ${stats.protectedDays === stats.heatDays ? 'text-green-600' : 'text-red-500'}`}>{stats.protectedDays} com proteção térmica</p>}
-                                                    </div>
+                                                    <div><p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-1`}>Secador / Chapinha</p><p className={`text-3xl font-black ${colors.orangeText}`}>{stats.heatDays} <span className="text-sm font-bold">dias</span></p>{stats.heatDays > 0 && <p className={`text-xs font-bold mt-1 ${stats.protectedDays === stats.heatDays ? 'text-green-600' : 'text-red-500'}`}>{stats.protectedDays} com proteção térmica</p>}</div>
                                                     <i className="ph-fill ph-fire text-orange-500 text-5xl opacity-80"></i>
                                                 </Card>
 
                                                 {/* EXTRAS */}
                                                 <Card style={{animationDelay: '960ms'}} onClick={() => openModal('extras', 'Extras', 'ph-hand-heart', `${colors.teal} bg-opacity-20`, colors.tealText, `${stats.totalExtrasMins}m`, colors.tealText)} colors={colors} className={`cascade-item col-span-2 flex justify-between items-center p-6 relative overflow-hidden group border-2 ${colors.border} cursor-pointer hover:shadow-md transition-all`}>
                                                     <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`p-4 rounded-2xl ${colors.teal} bg-opacity-20`}><i className={`ph-fill ph-hand-heart ${colors.tealText} text-3xl`}></i></div>
-                                                        <div>
-                                                            <p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-0.5`}>Massagens & Cuidados</p>
-                                                            <p className={`text-xl font-black ${colors.textStrong}`}>{stats.totalExtrasMins} <span className="text-sm font-bold">minutos</span></p>
-                                                        </div>
-                                                    </div>
+                                                    <div className="flex items-center gap-4"><div className={`p-4 rounded-2xl ${colors.teal} bg-opacity-20`}><i className={`ph-fill ph-hand-heart ${colors.tealText} text-3xl`}></i></div><div><p className={`text-xs font-bold uppercase tracking-widest ${colors.textLight} mb-0.5`}>Massagens & Cuidados</p><p className={`text-xl font-black ${colors.textStrong}`}>{stats.totalExtrasMins} <span className="text-sm font-bold">minutos</span></p></div></div>
                                                 </Card>
                                             </div>
                                         </div>
@@ -1543,32 +1237,26 @@
                             </div>
                         </div>
 
-                        {/* --- DYNAMIC ISLAND (MENU INFERIOR) --- */}
-                        <div 
-                            className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] flex flex-col items-center ${colors.bottomNav} backdrop-blur-xl border ${colors.border} rounded-[2rem] z-[60] shadow-[0_10px_40px_rgba(0,0,0,0.15)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] overflow-hidden ${isNavOpen ? 'h-[130px]' : 'h-14'}`}
-                        >
-                            <div 
-                                className="w-full h-14 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-black/5 transition-colors absolute top-0 z-10" 
-                                onTouchStart={handleNavTouchStart}
-                                onTouchMove={handleNavTouchMove}
-                                onTouchEnd={handleNavTouchEnd}
-                                onClick={handleNavClick}
-                            >
+                        {/* --- DYNAMIC ISLAND (MENU INFERIOR COM 4 BOTÕES) --- */}
+                        <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[350px] flex flex-col items-center ${colors.bottomNav} backdrop-blur-xl border ${colors.border} rounded-[2rem] z-[60] shadow-[0_10px_40px_rgba(0,0,0,0.15)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] overflow-hidden ${isNavOpen ? 'h-[130px]' : 'h-14'}`}>
+                            <div className="w-full h-14 flex flex-col justify-center items-center shrink-0 cursor-pointer hover:bg-black/5 transition-colors absolute top-0 z-10" onTouchStart={handleNavTouchStart} onTouchMove={handleNavTouchMove} onTouchEnd={handleNavTouchEnd} onClick={handleNavClick}>
                                 <div className={`flex flex-col gap-1 mb-1 mt-1 pointer-events-none ${!isNavOpen && 'grip-animate'}`}>
-                                    <div className={`w-8 h-1 rounded-full ${colors.primary} shadow-sm`}></div>
-                                    <div className={`w-8 h-1 rounded-full ${colors.primary} shadow-sm`}></div>
+                                    <div className={`w-8 h-1 rounded-full ${colors.primary} shadow-sm`}></div><div className={`w-8 h-1 rounded-full ${colors.primary} shadow-sm`}></div>
                                 </div>
                             </div>
                             
-                            <div className={`w-full h-full flex justify-center items-center gap-3 sm:gap-6 pt-12 px-2 pb-2 transition-opacity duration-300 ${isNavOpen ? 'opacity-100 delay-100' : 'opacity-0 pointer-events-none'}`}>
-                                <button onClick={(e) => { e.stopPropagation(); handleNavMenuClick('home'); }} className={`flex-1 max-w-[90px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${activeTab === 'home' ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
+                            <div className={`w-full h-full flex justify-center items-center gap-1 sm:gap-3 pt-12 px-1 pb-2 transition-opacity duration-300 ${isNavOpen ? 'opacity-100 delay-100' : 'opacity-0 pointer-events-none'}`}>
+                                <button onClick={(e) => { e.stopPropagation(); handleNavMenuClick('home'); }} className={`flex-1 max-w-[75px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${activeTab === 'home' && !isSettingsOpen ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
                                     <i className="ph-fill ph-hand-heart text-[26px]"></i><span className="text-[10px] font-bold uppercase tracking-wider">Diário</span>
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); handleNavMenuClick('calendar'); }} className={`flex-1 max-w-[90px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${activeTab === 'calendar' ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
+                                <button onClick={(e) => { e.stopPropagation(); handleNavMenuClick('calendar'); }} className={`flex-1 max-w-[75px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${activeTab === 'calendar' && !isSettingsOpen ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
                                     <i className="ph-fill ph-calendar-blank text-[26px]"></i><span className="text-[10px] font-bold uppercase tracking-wider">Histórico</span>
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); handleNavMenuClick('stats'); }} className={`flex-1 max-w-[90px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${activeTab === 'stats' ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
+                                <button onClick={(e) => { e.stopPropagation(); handleNavMenuClick('stats'); }} className={`flex-1 max-w-[75px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${activeTab === 'stats' && !isSettingsOpen ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
                                     <i className="ph-fill ph-sparkle text-[26px]"></i><span className="text-[10px] font-bold uppercase tracking-wider">Resumo</span>
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); handleOpenSettings(); setIsNavOpen(false); }} className={`flex-1 max-w-[75px] py-2.5 rounded-2xl flex flex-col items-center gap-1.5 transition-all hover:scale-105 ${isSettingsOpen ? `${colors.primary} ${colors.primaryText} shadow-sm` : colors.textLight}`}>
+                                    <i className="ph-fill ph-gear text-[26px]"></i><span className="text-[10px] font-bold uppercase tracking-wider">Opções</span>
                                 </button>
                             </div>
                         </div>
